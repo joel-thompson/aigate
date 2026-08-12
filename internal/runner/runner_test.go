@@ -1,6 +1,7 @@
 package runner
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"strings"
@@ -81,5 +82,81 @@ func TestRunEnrich_Empty(t *testing.T) {
 	got := RunEnrich(context.Background(), nil)
 	if got != "" {
 		t.Errorf("expected empty string for no providers, got %q", got)
+	}
+}
+
+func TestRunGate_AllPass(t *testing.T) {
+	providers := []provider.Provider{
+		&stubProvider{result: &provider.Result{ExitCode: 0, Label: "check-a"}},
+		&stubProvider{result: &provider.Result{ExitCode: 0, Label: "check-b"}},
+	}
+	var buf bytes.Buffer
+	passed := RunGate(context.Background(), providers, &buf)
+	if !passed {
+		t.Error("expected all checks to pass")
+	}
+	if buf.Len() != 0 {
+		t.Errorf("expected no stderr output, got: %s", buf.String())
+	}
+}
+
+func TestRunGate_SomeFail(t *testing.T) {
+	providers := []provider.Provider{
+		&stubProvider{result: &provider.Result{ExitCode: 0, Label: "pass"}},
+		&stubProvider{result: &provider.Result{ExitCode: 1, Output: "found a problem\n", Label: "fail"}},
+		&stubProvider{result: &provider.Result{ExitCode: 0, Label: "also-pass"}},
+	}
+	var buf bytes.Buffer
+	passed := RunGate(context.Background(), providers, &buf)
+	if passed {
+		t.Error("expected gate to fail when a check fails")
+	}
+	output := buf.String()
+	if !strings.Contains(output, "[fail] FAILED") {
+		t.Errorf("expected failure label in output, got: %s", output)
+	}
+	if !strings.Contains(output, "found a problem") {
+		t.Errorf("expected failure detail in output, got: %s", output)
+	}
+}
+
+func TestRunGate_AllFail(t *testing.T) {
+	providers := []provider.Provider{
+		&stubProvider{result: &provider.Result{ExitCode: 1, Output: "err1\n", Label: "a"}},
+		&stubProvider{result: &provider.Result{ExitCode: 2, Output: "err2\n", Label: "b"}},
+	}
+	var buf bytes.Buffer
+	passed := RunGate(context.Background(), providers, &buf)
+	if passed {
+		t.Error("expected gate to fail")
+	}
+	output := buf.String()
+	if !strings.Contains(output, "[a] FAILED") {
+		t.Errorf("expected first failure, got: %s", output)
+	}
+	if !strings.Contains(output, "[b] FAILED") {
+		t.Errorf("expected second failure, got: %s", output)
+	}
+}
+
+func TestRunGate_ProviderError(t *testing.T) {
+	providers := []provider.Provider{
+		&stubProvider{err: errors.New("provider crashed")},
+	}
+	var buf bytes.Buffer
+	passed := RunGate(context.Background(), providers, &buf)
+	if passed {
+		t.Error("expected gate to fail on provider error")
+	}
+	if !strings.Contains(buf.String(), "provider crashed") {
+		t.Errorf("expected error message in output, got: %s", buf.String())
+	}
+}
+
+func TestRunGate_Empty(t *testing.T) {
+	var buf bytes.Buffer
+	passed := RunGate(context.Background(), nil, &buf)
+	if !passed {
+		t.Error("expected empty provider list to pass")
 	}
 }
