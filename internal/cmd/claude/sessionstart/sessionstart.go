@@ -9,6 +9,7 @@ import (
 
 	"github.com/joelthompson/aigate/internal/config"
 	"github.com/joelthompson/aigate/internal/provider"
+	"github.com/joelthompson/aigate/internal/provider/projectstructure"
 	"github.com/joelthompson/aigate/internal/provider/shell"
 	"github.com/joelthompson/aigate/internal/runner"
 	"github.com/spf13/cobra"
@@ -66,6 +67,10 @@ func buildProviders(cfg *config.Config) []provider.Provider {
 	var providers []provider.Provider
 	for _, pc := range cfg.Claude.SessionStart.Context {
 		switch pc.Type {
+		case "project-structure":
+			providers = append(providers, &projectstructure.Provider{
+				MaxDepth: pc.MaxDepth,
+			})
 		case "shell":
 			providers = append(providers, &shell.Provider{
 				Command: pc.Command,
