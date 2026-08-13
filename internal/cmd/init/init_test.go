@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/joelthompson/aigate/internal/config"
+	"github.com/joelthompson/aigate/internal/wiring"
 )
 
 func TestRunInit_StopPromptWritesConfigSectionAndRegistersHook(t *testing.T) {
@@ -101,11 +102,11 @@ func TestRunInit_SkipsConfigPromptWhenConfigExists(t *testing.T) {
 func TestRunInit_SkipsSessionHookPromptWhenAlreadyRegistered(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	settingsPath, err := claudeSettingsPath()
+	settingsPath, err := wiring.SettingsPath(".")
 	if err != nil {
 		t.Fatalf("resolving settings path: %v", err)
 	}
-	if result := RegisterClaudeHooks(settingsPath); result.Err != nil {
+	if result := wiring.RegisterClaudeHooks(settingsPath); result.Err != nil {
 		t.Fatalf("seeding session-start hook: %v", result.Err)
 	}
 
@@ -113,10 +114,10 @@ func TestRunInit_SkipsSessionHookPromptWhenAlreadyRegistered(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolving config path: %v", err)
 	}
-	if result := ScaffoldConfig(configPath); result.Err != nil {
+	if result := wiring.ScaffoldConfig(configPath); result.Err != nil {
 		t.Fatalf("seeding config: %v", result.Err)
 	}
-	if result := EnableSessionStart(configPath); result.Err != nil {
+	if result := wiring.EnableSessionStart(configPath); result.Err != nil {
 		t.Fatalf("seeding session-start section: %v", result.Err)
 	}
 
@@ -141,11 +142,11 @@ func TestRunInit_SkipsSessionHookPromptWhenAlreadyRegistered(t *testing.T) {
 func TestRunInit_AsksStopPromptQuestionWhenOnlyHalfDone(t *testing.T) {
 	t.Chdir(t.TempDir())
 
-	settingsPath, err := claudeSettingsPath()
+	settingsPath, err := wiring.SettingsPath(".")
 	if err != nil {
 		t.Fatalf("resolving settings path: %v", err)
 	}
-	if result := RegisterStopHook(settingsPath); result.Err != nil {
+	if result := wiring.RegisterStopHook(settingsPath); result.Err != nil {
 		t.Fatalf("seeding stop hook: %v", result.Err)
 	}
 
@@ -186,10 +187,10 @@ func TestRunInit_SkipsGitHookPromptWhenAlreadyPresent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("resolving config path: %v", err)
 	}
-	if result := ScaffoldConfig(configPath); result.Err != nil {
+	if result := wiring.ScaffoldConfig(configPath); result.Err != nil {
 		t.Fatalf("seeding config: %v", result.Err)
 	}
-	if result := EnablePreCommitChecks(configPath); result.Err != nil {
+	if result := wiring.EnablePreCommitChecks(configPath); result.Err != nil {
 		t.Fatalf("seeding pre-commit section: %v", result.Err)
 	}
 

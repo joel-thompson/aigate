@@ -1,4 +1,4 @@
-package initcmd
+package wiring
 
 import (
 	"os"
@@ -7,45 +7,81 @@ import (
 	"github.com/joelthompson/aigate/internal/config"
 )
 
-// state records which init artifacts already exist in the project, so
-// runInit can skip prompting for anything already set up.
-type state struct {
-	config          bool
-	sessionHook     bool
-	sessionContext  bool
-	stopHook        bool
-	stopPrompt      bool
-	gitHook         bool
-	preCommitChecks bool
-	ciContext       bool
+// paths holds the absolute locations of the artifacts aigate installs into a
+// project, resolved once from a root so init's writes and doctor's reads
+// can't drift onto two different notions of "the config file" or "the
+// settings file".
+type paths struct {
+	root     string
+	config   string
+	settings string
+	gitHook  string
 }
 
-// detectState inspects the project for already-configured aigate artifacts,
-// resolving the same paths the init steps write to.
-func detectState() (state, error) {
-	configPath, err := filepath.Abs(config.DefaultConfigFile)
+// pathsFor resolves root to an absolute path and joins it with each
+// artifact's project-relative location.
+func pathsFor(root string) (paths, error) {
+	abs, err := filepath.Abs(root)
 	if err != nil {
-		return state{}, err
+		return paths{}, err
 	}
-	settingsPath, err := claudeSettingsPath()
-	if err != nil {
-		return state{}, err
-	}
-	gitHookPath, err := filepath.Abs(filepath.Join(".git", "hooks", "pre-commit"))
-	if err != nil {
-		return state{}, err
-	}
-
-	return state{
-		config:          configInstalled(configPath),
-		sessionHook:     hookInstalled(settingsPath, "SessionStart", "aigate claude session-start"),
-		sessionContext:  sessionContextInstalled(configPath),
-		stopHook:        hookInstalled(settingsPath, "Stop", "aigate claude stop"),
-		stopPrompt:      stopPromptInstalled(configPath),
-		gitHook:         gitHookInstalled(gitHookPath),
-		preCommitChecks: preCommitChecksInstalled(configPath),
-		ciContext:       ciContextInstalled(configPath),
+	return paths{
+		root:     abs,
+		config:   filepath.Join(abs, config.DefaultConfigFile),
+		settings: filepath.Join(abs, ".claude", "settings.local.json"),
+		gitHook:  filepath.Join(abs, ".git", "hooks", "pre-commit"),
 	}, nil
+}
+
+// SettingsPath returns the absolute path to the project-local Claude Code
+// settings file aigate registers hooks in, resolved from root.
+// settings.local.json is the per-developer file, so hook registration stays
+// out of git.
+func SettingsPath(root string) (string, error) {
+	p, err := pathsFor(root)
+	if err != nil {
+		return "", err
+	}
+	return p.settings, nil
+}
+
+// state records which init artifacts already exist in the project, so
+// runInit can skip prompting for anything already set up. Fields are
+// exported so internal/cmd/init can read them by name; the type itself stays
+// unexported since only Detect constructs one.
+type state struct {
+	Config          bool
+	SessionHook     bool
+	SessionContext  bool
+	StopHook        bool
+	StopPrompt      bool
+	GitHook         bool
+	PreCommitChecks bool
+	CIContext       bool
+}
+
+// detectStateAt inspects the project at p for already-configured aigate
+// artifacts, resolving the same paths the init steps write to.
+func detectStateAt(p paths) state {
+	return state{
+		Config:          configInstalled(p.config),
+		SessionHook:     hookInstalled(p.settings, sessionStartEvent, sessionStartCommand),
+		SessionContext:  sessionContextInstalled(p.config),
+		StopHook:        hookInstalled(p.settings, stopEvent, stopCommand),
+		StopPrompt:      stopPromptInstalled(p.config),
+		GitHook:         gitHookInstalled(p.gitHook),
+		PreCommitChecks: preCommitChecksInstalled(p.config),
+		CIContext:       ciContextInstalled(p.config),
+	}
+}
+
+// Detect inspects root for already-configured aigate artifacts.
+func Detect(root string) (state, error) {
+	p, err := pathsFor(root)
+	if err != nil {
+		return state{}, err
+	}
+	return detectStateAt(p), nil
 }
 
 // configInstalled reports whether a config file already exists at path.

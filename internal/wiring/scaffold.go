@@ -1,4 +1,4 @@
-package initcmd
+package wiring
 
 import (
 	"encoding/json"
@@ -6,6 +6,18 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+)
+
+// binaryName is the name aigate registers hooks under and looks for on
+// $PATH. sessionStart/stop event and command literals are hoisted here,
+// the file that writes them, so registerHook and the *Installed detection
+// helpers in detect.go can't drift on what "already registered" means.
+const (
+	binaryName          = "aigate"
+	sessionStartEvent   = "SessionStart"
+	sessionStartCommand = binaryName + " claude session-start"
+	stopEvent           = "Stop"
+	stopCommand         = binaryName + " claude stop"
 )
 
 type StepResult struct {
@@ -42,13 +54,13 @@ func ScaffoldConfig(path string) StepResult {
 }
 
 func RegisterClaudeHooks(settingsPath string) StepResult {
-	return registerHook(settingsPath, "SessionStart", "aigate claude session-start")
+	return registerHook(settingsPath, sessionStartEvent, sessionStartCommand)
 }
 
 // RegisterStopHook registers the Stop hook that asks Claude for a concise
 // recap before it finishes responding.
 func RegisterStopHook(settingsPath string) StepResult {
-	return registerHook(settingsPath, "Stop", "aigate claude stop")
+	return registerHook(settingsPath, stopEvent, stopCommand)
 }
 
 func registerHook(settingsPath, event, command string) StepResult {
@@ -142,7 +154,7 @@ func readOrCreateSettings(path string) (map[string]any, error) {
 // aigate. Shared by SetupGitHook and gitHookInstalled (detect.go) so the two
 // can't drift on what counts as "already set up".
 func hookHasAigate(content string) bool {
-	return strings.Contains(content, "aigate")
+	return strings.Contains(content, binaryName)
 }
 
 func SetupGitHook(hookPath string) StepResult {

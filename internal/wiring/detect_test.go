@@ -1,4 +1,4 @@
-package initcmd
+package wiring
 
 import (
 	"encoding/json"
@@ -248,20 +248,19 @@ func TestCIContextInstalled_FalseOnUnparseableYAML(t *testing.T) {
 }
 
 func TestDetectState_AllFalseInFreshDir(t *testing.T) {
-	t.Chdir(t.TempDir())
+	dir := t.TempDir()
 
-	cur, err := detectState()
+	cur, err := Detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cur.config || cur.sessionHook || cur.stopHook || cur.stopPrompt || cur.gitHook {
+	if cur.Config || cur.SessionHook || cur.StopHook || cur.StopPrompt || cur.GitHook {
 		t.Errorf("expected a fresh directory to report nothing installed, got %+v", cur)
 	}
 }
 
 func TestDetectState_AllTrueWhenFullySetUp(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
 
 	os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte("claude:\n  stop-prompt:\n    enabled: true\n"), 0644)
 
@@ -280,18 +279,17 @@ func TestDetectState_AllTrueWhenFullySetUp(t *testing.T) {
 	os.MkdirAll(filepath.Dir(hookPath), 0755)
 	os.WriteFile(hookPath, []byte("#!/bin/sh\naigate git pre-commit\n"), 0755)
 
-	cur, err := detectState()
+	cur, err := Detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cur.config || !cur.sessionHook || !cur.stopHook || !cur.stopPrompt || !cur.gitHook {
+	if !cur.Config || !cur.SessionHook || !cur.StopHook || !cur.StopPrompt || !cur.GitHook {
 		t.Errorf("expected fully set up project to report everything installed, got %+v", cur)
 	}
 }
 
 func TestDetectState_PartialStopSetup(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
 
 	os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte("claude:\n  session-start:\n    context: []\n"), 0644)
 
@@ -303,44 +301,42 @@ func TestDetectState_PartialStopSetup(t *testing.T) {
 		},
 	})
 
-	cur, err := detectState()
+	cur, err := Detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cur.stopHook {
-		t.Error("expected stopHook to be true when the Stop hook is registered")
+	if !cur.StopHook {
+		t.Error("expected StopHook to be true when the Stop hook is registered")
 	}
-	if cur.stopPrompt {
-		t.Error("expected stopPrompt to be false when claude.stop-prompt is absent")
+	if cur.StopPrompt {
+		t.Error("expected StopPrompt to be false when claude.stop-prompt is absent")
 	}
 }
 
 func TestDetectState_ReportsCIContext(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
 
 	os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte("claude:\n  session-start:\n    context:\n      - type: ci-info\n"), 0644)
 
-	cur, err := detectState()
+	cur, err := Detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if !cur.ciContext {
-		t.Error("expected ciContext to be true when a ci-info entry is present")
+	if !cur.CIContext {
+		t.Error("expected CIContext to be true when a ci-info entry is present")
 	}
 }
 
 func TestDetectState_ReportsNoCIContext(t *testing.T) {
 	dir := t.TempDir()
-	t.Chdir(dir)
 
 	os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte("claude:\n  session-start:\n    context: []\n"), 0644)
 
-	cur, err := detectState()
+	cur, err := Detect(dir)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
-	if cur.ciContext {
-		t.Error("expected ciContext to be false when no ci-info entry is present")
+	if cur.CIContext {
+		t.Error("expected CIContext to be false when no ci-info entry is present")
 	}
 }

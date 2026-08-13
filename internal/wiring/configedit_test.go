@@ -1,4 +1,4 @@
-package initcmd
+package wiring
 
 import (
 	"errors"
