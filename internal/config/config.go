@@ -13,6 +13,14 @@ import (
 
 const DefaultConfigFile = ".aigate.yml"
 
+// DefaultStopPrompt is the recap instruction the Stop hook feeds back when
+// claude.stop-prompt is enabled without an explicit prompt.
+const DefaultStopPrompt = "type a clean recap. keep responses focused, brief, and concise. keep disclaimers and caveats short, and spend most of the response on the main answer. If necessary, give a high-level explanation"
+
+// DefaultStopMinLength is the reply length, in characters, that init writes
+// into a scaffolded config as the threshold below which no recap is requested.
+const DefaultStopMinLength = 400
+
 type Config struct {
 	Claude *ClaudeConfig `yaml:"claude"`
 	Git    *GitConfig    `yaml:"git"`
@@ -20,10 +28,21 @@ type Config struct {
 
 type ClaudeConfig struct {
 	SessionStart *SessionStartConfig `yaml:"session-start"`
+	StopPrompt   *StopPromptConfig   `yaml:"stop-prompt"`
 }
 
 type SessionStartConfig struct {
 	Context []ProviderConfig `yaml:"context"`
+}
+
+// StopPromptConfig configures the Stop hook that asks Claude for a concise
+// recap before it finishes responding. An empty Prompt uses DefaultStopPrompt.
+// MinLength skips the recap when the reply is already shorter than that many
+// characters; zero or absent means always ask.
+type StopPromptConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	Prompt    string `yaml:"prompt,omitempty"`
+	MinLength int    `yaml:"min-length,omitempty"`
 }
 
 type GitConfig struct {
@@ -45,6 +64,7 @@ var validTypes = map[string]bool{
 	"project-structure": true,
 	"shell":             true,
 	"secrets-scan":      true,
+	"ci-info":           true,
 }
 
 func Load(path string) (*Config, error) {

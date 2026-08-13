@@ -2,6 +2,7 @@ package claude
 
 import (
 	"github.com/joelthompson/aigate/internal/cmd/claude/sessionstart"
+	"github.com/joelthompson/aigate/internal/cmd/claude/stop"
 	"github.com/spf13/cobra"
 )
 
@@ -12,6 +13,7 @@ func NewCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(sessionstart.NewCommand())
+	cmd.AddCommand(stop.NewCommand())
 
 	return cmd
 }

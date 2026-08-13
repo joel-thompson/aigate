@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -24,12 +25,16 @@ func TestRunEnrich_AllSucceed(t *testing.T) {
 		&stubProvider{result: &provider.Result{Output: "output1\n", Label: "First"}},
 		&stubProvider{result: &provider.Result{Output: "output2\n", Label: "Second"}},
 	}
-	got := RunEnrich(context.Background(), providers)
+	var errs bytes.Buffer
+	got := RunEnrich(context.Background(), providers, &errs)
 	if !strings.Contains(got, "## First\noutput1") {
 		t.Errorf("expected labeled first output, got:\n%s", got)
 	}
 	if !strings.Contains(got, "## Second\noutput2") {
 		t.Errorf("expected labeled second output, got:\n%s", got)
+	}
+	if errs.Len() != 0 {
+		t.Errorf("expected no diagnostics, got: %s", errs.String())
 	}
 }
 
@@ -39,15 +44,19 @@ func TestRunEnrich_SomeFail(t *testing.T) {
 		&stubProvider{err: errors.New("boom")},
 		&stubProvider{result: &provider.Result{Output: "also good\n", Label: "Also OK"}},
 	}
-	got := RunEnrich(context.Background(), providers)
+	var errs bytes.Buffer
+	got := RunEnrich(context.Background(), providers, &errs)
 	if !strings.Contains(got, "## OK\ngood") {
 		t.Errorf("expected first success, got:\n%s", got)
 	}
-	if !strings.Contains(got, "[error] boom") {
-		t.Errorf("expected error line, got:\n%s", got)
+	if strings.Contains(got, "[error] boom") {
+		t.Errorf("expected error line to be excluded from context, got:\n%s", got)
 	}
 	if !strings.Contains(got, "## Also OK\nalso good") {
 		t.Errorf("expected third success, got:\n%s", got)
+	}
+	if !strings.Contains(errs.String(), "[error] boom") {
+		t.Errorf("expected error line in diagnostics, got: %s", errs.String())
 	}
 }
 
@@ -56,12 +65,16 @@ func TestRunEnrich_AllFail(t *testing.T) {
 		&stubProvider{err: errors.New("err1")},
 		&stubProvider{err: errors.New("err2")},
 	}
-	got := RunEnrich(context.Background(), providers)
-	if !strings.Contains(got, "[error] err1") {
-		t.Errorf("expected first error, got:\n%s", got)
+	var errs bytes.Buffer
+	got := RunEnrich(context.Background(), providers, &errs)
+	if got != "" {
+		t.Errorf("expected empty context when all providers fail, got:\n%s", got)
 	}
-	if !strings.Contains(got, "[error] err2") {
-		t.Errorf("expected second error, got:\n%s", got)
+	if !strings.Contains(errs.String(), "[error] err1") {
+		t.Errorf("expected first error in diagnostics, got: %s", errs.String())
+	}
+	if !strings.Contains(errs.String(), "[error] err2") {
+		t.Errorf("expected second error in diagnostics, got: %s", errs.String())
 	}
 }
 
@@ -69,7 +82,7 @@ func TestRunEnrich_NoLabel(t *testing.T) {
 	providers := []provider.Provider{
 		&stubProvider{result: &provider.Result{Output: "bare output\n", Label: ""}},
 	}
-	got := RunEnrich(context.Background(), providers)
+	got := RunEnrich(context.Background(), providers, io.Discard)
 	if strings.Contains(got, "##") {
 		t.Errorf("expected no label header, got:\n%s", got)
 	}
@@ -78,8 +91,36 @@ func TestRunEnrich_NoLabel(t *testing.T) {
 	}
 }
 
+func TestRunEnrich_SkipsEmptyOutputSection(t *testing.T) {
+	providers := []provider.Provider{
+		&stubProvider{result: &provider.Result{Output: "", Label: "CI"}},
+		&stubProvider{result: &provider.Result{Output: "output\n", Label: "Second"}},
+	}
+	got := RunEnrich(context.Background(), providers, io.Discard)
+	if strings.Contains(got, "## CI") {
+		t.Errorf("expected the empty-output section to be omitted entirely, got:\n%s", got)
+	}
+	if strings.HasPrefix(got, "\n") {
+		t.Errorf("expected no leading blank line from the skipped section, got:\n%q", got)
+	}
+	if !strings.Contains(got, "## Second\noutput") {
+		t.Errorf("expected the non-empty section to still appear, got:\n%s", got)
+	}
+}
+
+func TestRunEnrich_AllEmptyOutputs(t *testing.T) {
+	providers := []provider.Provider{
+		&stubProvider{result: &provider.Result{Output: "", Label: "CI"}},
+		&stubProvider{result: &provider.Result{Output: "", Label: "Other"}},
+	}
+	got := RunEnrich(context.Background(), providers, io.Discard)
+	if got != "" {
+		t.Errorf("expected empty string when every provider produces empty output, got %q", got)
+	}
+}
+
 func TestRunEnrich_Empty(t *testing.T) {
-	got := RunEnrich(context.Background(), nil)
+	got := RunEnrich(context.Background(), nil, io.Discard)
 	if got != "" {
 		t.Errorf("expected empty string for no providers, got %q", got)
 	}

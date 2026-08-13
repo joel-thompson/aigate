@@ -25,30 +25,16 @@ func (r StepResult) String() string {
 	return r.Action
 }
 
-const defaultConfig = `# aigate configuration
+const configHeader = `# aigate configuration
 # See: https://github.com/joelthompson/aigate
-
-claude:
-  session-start:
-    context:
-      - type: project-structure
-        max_depth: 3
-      # - type: shell
-      #   command: "go-task --list"
-      #   label: "Available tasks"
-
-git:
-  pre-commit:
-    checks:
-      - type: secrets-scan
 `
 
 func ScaffoldConfig(path string) StepResult {
-	if _, err := os.Stat(path); err == nil {
+	if configInstalled(path) {
 		return StepResult{Skipped: true, Reason: fmt.Sprintf("%s already exists", filepath.Base(path))}
 	}
 
-	if err := os.WriteFile(path, []byte(defaultConfig), 0644); err != nil {
+	if err := os.WriteFile(path, []byte(configHeader), 0644); err != nil {
 		return StepResult{Err: fmt.Errorf("writing %s: %w", filepath.Base(path), err)}
 	}
 
@@ -56,6 +42,16 @@ func ScaffoldConfig(path string) StepResult {
 }
 
 func RegisterClaudeHooks(settingsPath string) StepResult {
+	return registerHook(settingsPath, "SessionStart", "aigate claude session-start")
+}
+
+// RegisterStopHook registers the Stop hook that asks Claude for a concise
+// recap before it finishes responding.
+func RegisterStopHook(settingsPath string) StepResult {
+	return registerHook(settingsPath, "Stop", "aigate claude stop")
+}
+
+func registerHook(settingsPath, event, command string) StepResult {
 	settings, err := readOrCreateSettings(settingsPath)
 	if err != nil {
 		return StepResult{Err: fmt.Errorf("reading settings: %w", err)}
@@ -67,21 +63,21 @@ func RegisterClaudeHooks(settingsPath string) StepResult {
 		settings["hooks"] = hooks
 	}
 
-	sessionStart, _ := hooks["SessionStart"].([]any)
+	entries, _ := hooks[event].([]any)
 
-	if containsAigateHook(sessionStart) {
-		return StepResult{Skipped: true, Reason: "aigate hook already registered in settings.json"}
+	if containsCommand(entries, command) {
+		return StepResult{Skipped: true, Reason: fmt.Sprintf("aigate %s hook already registered in %s", event, filepath.Base(settingsPath))}
 	}
 
-	sessionStart = append(sessionStart, map[string]any{
+	entries = append(entries, map[string]any{
 		"hooks": []any{
 			map[string]any{
 				"type":    "command",
-				"command": "aigate claude session-start",
+				"command": command,
 			},
 		},
 	})
-	hooks["SessionStart"] = sessionStart
+	hooks[event] = entries
 
 	if err := os.MkdirAll(filepath.Dir(settingsPath), 0755); err != nil {
 		return StepResult{Err: fmt.Errorf("creating directory: %w", err)}
@@ -97,27 +93,29 @@ func RegisterClaudeHooks(settingsPath string) StepResult {
 		return StepResult{Err: fmt.Errorf("writing settings: %w", err)}
 	}
 
-	return StepResult{Action: "registered SessionStart hook in settings.json"}
+	return StepResult{Action: fmt.Sprintf("registered %s hook in %s", event, filepath.Base(settingsPath))}
 }
 
-func containsAigateHook(sessionStart []any) bool {
-	for _, group := range sessionStart {
+// containsCommand reports whether entries (a hook event's array in the
+// Claude settings file) already contains an entry running command. It walks
+// both the nested hooks-array schema and the flat command field for
+// backwards compat with hand-written entries.
+func containsCommand(entries []any, command string) bool {
+	for _, group := range entries {
 		groupMap, ok := group.(map[string]any)
 		if !ok {
 			continue
 		}
-		// Check nested hooks array (correct schema)
 		if hooksList, ok := groupMap["hooks"].([]any); ok {
 			for _, h := range hooksList {
 				if hMap, ok := h.(map[string]any); ok {
-					if cmd, _ := hMap["command"].(string); strings.Contains(cmd, "aigate") {
+					if cmd, _ := hMap["command"].(string); cmd == command {
 						return true
 					}
 				}
 			}
 		}
-		// Also check flat command field for backwards compat with any manually-written entries
-		if cmd, _ := groupMap["command"].(string); strings.Contains(cmd, "aigate") {
+		if cmd, _ := groupMap["command"].(string); cmd == command {
 			return true
 		}
 	}
@@ -140,6 +138,13 @@ func readOrCreateSettings(path string) (map[string]any, error) {
 	return settings, nil
 }
 
+// hookHasAigate reports whether a pre-commit hook's content already invokes
+// aigate. Shared by SetupGitHook and gitHookInstalled (detect.go) so the two
+// can't drift on what counts as "already set up".
+func hookHasAigate(content string) bool {
+	return strings.Contains(content, "aigate")
+}
+
 func SetupGitHook(hookPath string) StepResult {
 	dir := filepath.Dir(hookPath)
 	if _, err := os.Stat(dir); os.IsNotExist(err) {
@@ -152,7 +157,7 @@ func SetupGitHook(hookPath string) StepResult {
 	}
 
 	if err == nil {
-		if strings.Contains(string(existing), "aigate") {
+		if hookHasAigate(string(existing)) {
 			return StepResult{Skipped: true, Reason: "aigate already in pre-commit hook"}
 		}
 		content := string(existing)

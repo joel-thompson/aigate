@@ -9,6 +9,7 @@ import (
 
 	"github.com/joelthompson/aigate/internal/config"
 	"github.com/joelthompson/aigate/internal/provider"
+	"github.com/joelthompson/aigate/internal/provider/ciinfo"
 	"github.com/joelthompson/aigate/internal/provider/projectstructure"
 	"github.com/joelthompson/aigate/internal/provider/shell"
 	"github.com/joelthompson/aigate/internal/runner"
@@ -40,8 +41,10 @@ func NewCommand() *cobra.Command {
 				return nil
 			}
 
-			output := runner.RunEnrich(cmd.Context(), providers)
-			fmt.Fprintln(cmd.OutOrStdout(), output)
+			output := runner.RunEnrich(cmd.Context(), providers, cmd.ErrOrStderr())
+			if output != "" {
+				fmt.Fprintln(cmd.OutOrStdout(), output)
+			}
 			return nil
 		},
 	}
@@ -76,6 +79,8 @@ func buildProviders(cfg *config.Config) []provider.Provider {
 				Command: pc.Command,
 				Label:   pc.Label,
 			})
+		case "ci-info":
+			providers = append(providers, &ciinfo.Provider{})
 		default:
 			providers = append(providers, &unsupportedProvider{typeName: pc.Type})
 		}

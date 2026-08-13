@@ -9,15 +9,22 @@ import (
 	"github.com/joelthompson/aigate/internal/provider"
 )
 
-func RunEnrich(ctx context.Context, providers []provider.Provider) string {
+// RunEnrich runs all context providers and returns their combined output for
+// injection into the AI session. Provider failures are written to w and
+// excluded from the returned string, so a failing provider never leaks a raw
+// error into the AI's context.
+func RunEnrich(ctx context.Context, providers []provider.Provider, w io.Writer) string {
 	var sections []string
 	for _, p := range providers {
 		result, err := p.Run(ctx)
 		if err != nil {
-			sections = append(sections, fmt.Sprintf("[error] %v", err))
+			fmt.Fprintf(w, "[error] %v\n", err)
 			continue
 		}
 		output := strings.TrimRight(result.Output, "\n")
+		if output == "" {
+			continue
+		}
 		if result.Label != "" {
 			sections = append(sections, fmt.Sprintf("## %s\n%s", result.Label, output))
 		} else {

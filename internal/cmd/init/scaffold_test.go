@@ -30,14 +30,8 @@ func TestScaffoldConfig_CreatesFile(t *testing.T) {
 	if len(content) == 0 {
 		t.Fatal("expected non-empty config file")
 	}
-	if !strings.Contains(content, "project-structure") {
-		t.Error("expected config to mention project-structure")
-	}
-	if !strings.Contains(content, "shell") {
-		t.Error("expected config to mention shell provider")
-	}
-	if !strings.Contains(content, "secrets-scan") {
-		t.Error("expected config to mention secrets-scan")
+	if !strings.HasPrefix(content, "# aigate configuration") {
+		t.Errorf("expected config to start with the aigate header, got:\n%s", content)
 	}
 }
 
@@ -76,7 +70,7 @@ func TestScaffoldConfig_DefaultConfigIsValid(t *testing.T) {
 
 func TestRegisterClaudeHooks_CreatesNewSettings(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path := filepath.Join(dir, "settings.local.json")
 
 	result := initcmd.RegisterClaudeHooks(path)
 
@@ -84,12 +78,12 @@ func TestRegisterClaudeHooks_CreatesNewSettings(t *testing.T) {
 		t.Fatalf("expected hooks to be registered, got: %s", result)
 	}
 
-	assertSettingsHasAigateHook(t, path)
+	assertSettingsHasHook(t, path, "SessionStart", "aigate claude session-start")
 }
 
 func TestRegisterClaudeHooks_AppendsToExistingSettings(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path := filepath.Join(dir, "settings.local.json")
 
 	existing := map[string]any{
 		"permissions": map[string]any{
@@ -113,12 +107,12 @@ func TestRegisterClaudeHooks_AppendsToExistingSettings(t *testing.T) {
 		t.Error("existing permissions key should be preserved")
 	}
 
-	assertSettingsHasAigateHook(t, path)
+	assertSettingsHasHook(t, path, "SessionStart", "aigate claude session-start")
 }
 
 func TestRegisterClaudeHooks_AppendsToExistingHooksArray(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path := filepath.Join(dir, "settings.local.json")
 
 	existing := map[string]any{
 		"hooks": map[string]any{
@@ -156,7 +150,7 @@ func TestRegisterClaudeHooks_AppendsToExistingHooksArray(t *testing.T) {
 
 func TestRegisterClaudeHooks_SkipsIfAigateAlreadyRegistered(t *testing.T) {
 	dir := t.TempDir()
-	path := filepath.Join(dir, "settings.json")
+	path := filepath.Join(dir, "settings.local.json")
 
 	existing := map[string]any{
 		"hooks": map[string]any{
@@ -286,9 +280,9 @@ func TestSetupGitHook_ReadErrorIsNotSwallowed(t *testing.T) {
 	}
 }
 
-// assertSettingsHasAigateHook verifies settings.json contains the aigate
-// SessionStart hook in the correct nested schema.
-func assertSettingsHasAigateHook(t *testing.T, path string) {
+// assertSettingsHasHook verifies settings.local.json contains a hook entry for the
+// given event running command, in the correct nested schema.
+func assertSettingsHasHook(t *testing.T, path, event, command string) {
 	t.Helper()
 
 	data, err := os.ReadFile(path)
@@ -305,12 +299,12 @@ func assertSettingsHasAigateHook(t *testing.T, path string) {
 	if !ok {
 		t.Fatal("expected hooks object")
 	}
-	sessionStart, ok := hooks["SessionStart"].([]any)
+	entries, ok := hooks[event].([]any)
 	if !ok {
-		t.Fatal("expected SessionStart array")
+		t.Fatalf("expected %s array", event)
 	}
 
-	for _, group := range sessionStart {
+	for _, group := range entries {
 		groupMap, ok := group.(map[string]any)
 		if !ok {
 			continue
@@ -324,10 +318,53 @@ func assertSettingsHasAigateHook(t *testing.T, path string) {
 			if !ok {
 				continue
 			}
-			if hMap["type"] == "command" && hMap["command"] == "aigate claude session-start" {
+			if hMap["type"] == "command" && hMap["command"] == command {
 				return
 			}
 		}
 	}
-	t.Fatal("aigate hook entry not found in SessionStart with correct nested schema")
+	t.Fatalf("hook entry not found in %s with command %q", event, command)
+}
+
+func TestRegisterStopHook_RegistersStopHook(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.local.json")
+
+	result := initcmd.RegisterStopHook(path)
+
+	if result.Skipped || result.Err != nil {
+		t.Fatalf("expected hook to be registered, got: %s", result)
+	}
+
+	assertSettingsHasHook(t, path, "Stop", "aigate claude stop")
+}
+
+func TestRegisterStopHook_PreservesSessionStartHook(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.local.json")
+
+	result := initcmd.RegisterClaudeHooks(path)
+	if result.Skipped || result.Err != nil {
+		t.Fatalf("expected SessionStart hook to be registered, got: %s", result)
+	}
+
+	result = initcmd.RegisterStopHook(path)
+	if result.Skipped || result.Err != nil {
+		t.Fatalf("expected Stop hook to be registered, got: %s", result)
+	}
+
+	assertSettingsHasHook(t, path, "SessionStart", "aigate claude session-start")
+	assertSettingsHasHook(t, path, "Stop", "aigate claude stop")
+}
+
+func TestRegisterStopHook_SkipsIfAlreadyRegistered(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "settings.local.json")
+
+	initcmd.RegisterStopHook(path)
+	result := initcmd.RegisterStopHook(path)
+
+	if !result.Skipped {
+		t.Fatal("expected skip when Stop hook already registered")
+	}
 }

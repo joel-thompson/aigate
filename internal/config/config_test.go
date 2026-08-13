@@ -269,6 +269,137 @@ claude:
 	}
 }
 
+func TestParse_StopPromptEnabledWithPrompt(t *testing.T) {
+	input := `
+claude:
+  stop-prompt:
+    enabled: true
+    prompt: "be brief"
+    min-length: 100
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Claude == nil || cfg.Claude.StopPrompt == nil {
+		t.Fatal("expected claude.stop-prompt to be non-nil")
+	}
+	sp := cfg.Claude.StopPrompt
+	if !sp.Enabled {
+		t.Error("expected enabled to be true")
+	}
+	if sp.Prompt != "be brief" {
+		t.Errorf("expected prompt %q, got %q", "be brief", sp.Prompt)
+	}
+	if sp.MinLength != 100 {
+		t.Errorf("expected min-length 100, got %d", sp.MinLength)
+	}
+}
+
+func TestParse_StopPromptEnabledWithoutPrompt(t *testing.T) {
+	input := `
+claude:
+  stop-prompt:
+    enabled: true
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Claude == nil || cfg.Claude.StopPrompt == nil {
+		t.Fatal("expected claude.stop-prompt to be non-nil")
+	}
+	if cfg.Claude.StopPrompt.Prompt != "" {
+		t.Errorf("expected empty prompt, got %q", cfg.Claude.StopPrompt.Prompt)
+	}
+}
+
+func TestParse_StopPromptMinLength(t *testing.T) {
+	input := `
+claude:
+  stop-prompt:
+    enabled: true
+    min-length: 250
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Claude.StopPrompt.MinLength != 250 {
+		t.Errorf("expected min-length 250, got %d", cfg.Claude.StopPrompt.MinLength)
+	}
+}
+
+func TestParse_StopPromptDisabled(t *testing.T) {
+	input := `
+claude:
+  stop-prompt:
+    enabled: false
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Claude.StopPrompt == nil {
+		t.Fatal("expected claude.stop-prompt to be non-nil")
+	}
+	if cfg.Claude.StopPrompt.Enabled {
+		t.Error("expected enabled to be false")
+	}
+}
+
+func TestParse_SessionStartAndStopPromptTogether(t *testing.T) {
+	input := `
+claude:
+  session-start:
+    context:
+      - type: project-structure
+  stop-prompt:
+    enabled: true
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cfg.Claude.SessionStart == nil {
+		t.Fatal("expected session-start to be non-nil")
+	}
+	if cfg.Claude.StopPrompt == nil {
+		t.Fatal("expected stop-prompt to be non-nil")
+	}
+}
+
+func TestParse_UnknownStopPromptKey(t *testing.T) {
+	input := `
+claude:
+  stop-prompt:
+    enbaled: true
+`
+	_, err := Parse([]byte(input))
+	if err == nil {
+		t.Fatal("expected error for unknown YAML key (typo)")
+	}
+}
+
+func TestParse_CIInfoType(t *testing.T) {
+	input := `
+claude:
+  session-start:
+    context:
+      - type: ci-info
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Claude.SessionStart.Context) != 1 {
+		t.Fatalf("expected 1 context provider, got %d", len(cfg.Claude.SessionStart.Context))
+	}
+	if cfg.Claude.SessionStart.Context[0].Type != "ci-info" {
+		t.Errorf("expected type ci-info, got %q", cfg.Claude.SessionStart.Context[0].Type)
+	}
+}
+
 func TestParse_ShellWithCommandNoLabel(t *testing.T) {
 	input := `
 claude:

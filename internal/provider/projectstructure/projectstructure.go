@@ -14,8 +14,8 @@ import (
 )
 
 const (
-	DefaultMaxDepth    = 3
-	maxEntriesPerDir   = 50
+	DefaultMaxDepth  = 3
+	maxEntriesPerDir = 50
 )
 
 var alwaysSkip = map[string]bool{

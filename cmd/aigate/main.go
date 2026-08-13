@@ -6,6 +6,7 @@ import (
 	"os/signal"
 
 	"github.com/joelthompson/aigate/internal/cmd/root"
+	"github.com/joelthompson/aigate/internal/exit"
 )
 
 func main() {
@@ -14,6 +15,6 @@ func main() {
 
 	cmd := root.NewCommand()
 	if err := cmd.ExecuteContext(ctx); err != nil {
-		os.Exit(1)
+		os.Exit(exit.CodeFor(err))
 	}
 }
