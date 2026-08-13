@@ -9,11 +9,13 @@ import (
 	"github.com/joelthompson/aigate/internal/exit"
 )
 
+var version = "dev"
+
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 
-	cmd := root.NewCommand()
+	cmd := root.NewCommand(version)
 	if err := cmd.ExecuteContext(ctx); err != nil {
 		os.Exit(exit.CodeFor(err))
 	}

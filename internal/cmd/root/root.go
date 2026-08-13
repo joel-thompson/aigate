@@ -7,12 +7,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-func NewCommand() *cobra.Command {
+func NewCommand(version string) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:          "aigate",
 		Short:        "Claude Code lifecycle management — configurable hooks with pluggable providers",
 		SilenceUsage: true,
+		Version:      version,
 	}
+	cmd.SetVersionTemplate("aigate version {{.Version}}\n")
 
 	cmd.AddCommand(initcmd.NewCommand())
 	cmd.AddCommand(claude.NewCommand())
