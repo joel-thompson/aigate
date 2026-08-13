@@ -110,17 +110,14 @@ func hookInstalled(settingsPath, event, command string) bool {
 // parse error counts as not installed. Shared by sessionContextInstalled,
 // stopPromptInstalled, and preCommitChecksInstalled so detection can never
 // drift from what the matching merge* func (configedit.go) considers
-// "already present".
+// "already present". Delegates to loadConfigStatus (report.go) so this bool
+// answer and doctor's parse-error detail come from the same read.
 func configSectionInstalled(configPath string, present func(*config.Config) bool) bool {
-	data, err := os.ReadFile(configPath)
-	if err != nil {
+	st := loadConfigStatus(configPath)
+	if st.cfg == nil {
 		return false
 	}
-	cfg, err := config.Parse(data)
-	if err != nil {
-		return false
-	}
-	return present(cfg)
+	return present(st.cfg)
 }
 
 // sessionContextInstalled reports whether .aigate.yml already has a

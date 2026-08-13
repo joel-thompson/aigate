@@ -72,9 +72,7 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 			return err
 		}
 
-		ciDone := !ciDetected || cur.CIContext
-
-		if cur.Config && cur.SessionHook && cur.SessionContext && cur.StopHook && cur.StopPrompt && cur.GitHook && cur.PreCommitChecks && ciDone {
+		if wiring.Complete(cur, ciDetected) {
 			fmt.Fprintln(w, "Everything is already set up.")
 			fmt.Fprintln(w)
 		}
