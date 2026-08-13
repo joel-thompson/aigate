@@ -17,8 +17,6 @@ import (
 )
 
 func NewCommand() *cobra.Command {
-	var dryRun bool
-
 	cmd := &cobra.Command{
 		Use:   "session-start",
 		Short: "Run session-start context providers",
@@ -48,8 +46,6 @@ func NewCommand() *cobra.Command {
 			return nil
 		},
 	}
-
-	cmd.Flags().BoolVar(&dryRun, "dry-run", false, "Print context output for auditing (providers are still executed)")
 
 	return cmd
 }
