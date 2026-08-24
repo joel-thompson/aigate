@@ -58,6 +58,10 @@ type ProviderConfig struct {
 	MaxDepth int    `yaml:"max_depth,omitempty"`
 	Command  string `yaml:"command,omitempty"`
 	Label    string `yaml:"label,omitempty"`
+	// Files names the compose files for the docker-compose provider, for
+	// projects whose file docker's own discovery won't find (say
+	// docker-compose-services.yml). Empty means let docker discover.
+	Files []string `yaml:"files,omitempty"`
 }
 
 var validTypes = map[string]bool{
@@ -65,6 +69,7 @@ var validTypes = map[string]bool{
 	"shell":             true,
 	"secrets-scan":      true,
 	"ci-info":           true,
+	"docker-compose":    true,
 }
 
 func Load(path string) (*Config, error) {
@@ -92,14 +97,14 @@ func validate(cfg *Config) error {
 	if cfg.Claude != nil && cfg.Claude.SessionStart != nil {
 		for i, p := range cfg.Claude.SessionStart.Context {
 			if err := validateProvider(p, fmt.Sprintf("claude.session-start.context[%d]", i)); err != nil {
-				return err
+				return fmt.Errorf("validating config: %w", err)
 			}
 		}
 	}
 	if cfg.Git != nil && cfg.Git.PreCommit != nil {
 		for i, p := range cfg.Git.PreCommit.Checks {
 			if err := validateProvider(p, fmt.Sprintf("git.pre-commit.checks[%d]", i)); err != nil {
-				return err
+				return fmt.Errorf("validating config: %w", err)
 			}
 		}
 	}

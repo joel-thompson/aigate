@@ -503,6 +503,125 @@ func TestRunInit_RerunWithCircleCISkipsCIContext(t *testing.T) {
 	}
 }
 
+// TestRunInit_WithComposeFileAddsDockerContextStep is the compose-file
+// counterpart to TestRunInit_WithCircleCIAddsCIContextStep: a compose file in
+// the project root must get "- type: docker-compose" appended to
+// claude.session-start.context and the step reported.
+func TestRunInit_WithComposeFileAddsDockerContextStep(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	if err := os.MkdirAll(filepath.Join(".git", "hooks"), 0755); err != nil {
+		t.Fatalf("creating .git/hooks: %v", err)
+	}
+	if err := os.WriteFile("compose.yaml", []byte("services:\n  db:\n    image: postgres:16\n"), 0644); err != nil {
+		t.Fatalf("seeding compose.yaml: %v", err)
+	}
+
+	yesPrompter := func(string) bool { return true }
+	var out bytes.Buffer
+	if err := runInit(&out, yesPrompter, steps{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if !strings.Contains(out.String(), "Docker context:") {
+		t.Errorf("expected a Docker context step to be reported, got:\n%s", out.String())
+	}
+
+	data, err := os.ReadFile(config.DefaultConfigFile)
+	if err != nil {
+		t.Fatalf("reading generated config: %v", err)
+	}
+
+	want := fmt.Sprintf(`# aigate configuration
+# See: https://github.com/joelthompson/aigate
+
+claude:
+  session-start:
+    context:
+      - type: project-structure
+        max_depth: 3
+      # - type: shell
+      #   command: "go-task --list"
+      #   label: "Available tasks"
+      - type: docker-compose
+  stop-prompt:
+    enabled: true
+    # Fed back to Claude when it finishes responding.
+    prompt: %s
+    # Skip the recap when the reply is already shorter than this; 0 disables.
+    min-length: %d
+
+git:
+  pre-commit:
+    checks:
+      - type: secrets-scan
+`, strconv.Quote(config.DefaultStopPrompt), config.DefaultStopMinLength)
+
+	if string(data) != want {
+		t.Errorf("generated config mismatch:\ngot:\n%s\nwant:\n%s", data, want)
+	}
+}
+
+// TestRunInit_WithoutComposeFilePrintsNoDockerContextLine is the symmetric
+// case: with no compose file the wizard must omit the "Docker context" line
+// entirely rather than reporting it as skipped.
+func TestRunInit_WithoutComposeFilePrintsNoDockerContextLine(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	if err := os.MkdirAll(filepath.Join(".git", "hooks"), 0755); err != nil {
+		t.Fatalf("creating .git/hooks: %v", err)
+	}
+
+	yesPrompter := func(string) bool { return true }
+	var out bytes.Buffer
+	if err := runInit(&out, yesPrompter, steps{}); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if strings.Contains(out.String(), "Docker context") {
+		t.Errorf("expected no Docker context line when no compose file exists, got:\n%s", out.String())
+	}
+}
+
+// TestRunInit_RerunWithComposeFileSkipsDockerContext exercises the wizard
+// across two runs: the first adds docker-compose, the second must report it
+// already present rather than asking again.
+func TestRunInit_RerunWithComposeFileSkipsDockerContext(t *testing.T) {
+	t.Chdir(t.TempDir())
+
+	if err := os.MkdirAll(filepath.Join(".git", "hooks"), 0755); err != nil {
+		t.Fatalf("creating .git/hooks: %v", err)
+	}
+	if err := os.WriteFile("compose.yaml", []byte("services:\n  db:\n    image: postgres:16\n"), 0644); err != nil {
+		t.Fatalf("seeding compose.yaml: %v", err)
+	}
+
+	yesPrompter := func(string) bool { return true }
+	var firstOut bytes.Buffer
+	if err := runInit(&firstOut, yesPrompter, steps{}); err != nil {
+		t.Fatalf("unexpected error on first run: %v", err)
+	}
+
+	var asked []string
+	prompter := func(question string) bool {
+		asked = append(asked, question)
+		return true
+	}
+	var secondOut bytes.Buffer
+	if err := runInit(&secondOut, prompter, steps{}); err != nil {
+		t.Fatalf("unexpected error on second run: %v", err)
+	}
+
+	for _, q := range asked {
+		if strings.Contains(q, "Docker stack info") {
+			t.Errorf("expected the Docker context question not to be asked on rerun, got: %v", asked)
+		}
+	}
+	if !strings.Contains(secondOut.String(), "docker-compose already in") {
+		t.Errorf("expected the Docker context step to report it was already present, got:\n%s", secondOut.String())
+	}
+}
+
 // TestRunInit_AcceptingGitOnRerunAddsBothHookAndConfig closes the gap the
 // section-per-step design exists to avoid: declining git now and accepting
 // it later must add both the hook script and the git.pre-commit config, not

@@ -247,6 +247,41 @@ func TestCIContextInstalled_FalseOnUnparseableYAML(t *testing.T) {
 	}
 }
 
+func TestDockerContextInstalled_TrueWhenSet(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".aigate.yml")
+	os.WriteFile(path, []byte("claude:\n  session-start:\n    context:\n      - type: docker-compose\n"), 0644)
+
+	if !dockerContextInstalled(path) {
+		t.Error("expected dockerContextInstalled to be true when a docker-compose entry is present")
+	}
+}
+
+func TestDockerContextInstalled_FalseWhenAbsent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".aigate.yml")
+	os.WriteFile(path, []byte("claude:\n  session-start:\n    context:\n      - type: project-structure\n"), 0644)
+
+	if dockerContextInstalled(path) {
+		t.Error("expected dockerContextInstalled to be false when no docker-compose entry is present")
+	}
+}
+
+func TestDockerContextInstalled_FalseWhenConfigMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".aigate.yml")
+
+	if dockerContextInstalled(path) {
+		t.Error("expected dockerContextInstalled to be false when the config file doesn't exist")
+	}
+}
+
+func TestDockerContextInstalled_FalseOnUnparseableYAML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".aigate.yml")
+	os.WriteFile(path, []byte("claude: [this is not a mapping\n"), 0644)
+
+	if dockerContextInstalled(path) {
+		t.Error("expected dockerContextInstalled to be false on unparseable YAML")
+	}
+}
+
 func TestDetectState_AllFalseInFreshDir(t *testing.T) {
 	dir := t.TempDir()
 
@@ -338,5 +373,33 @@ func TestDetectState_ReportsNoCIContext(t *testing.T) {
 	}
 	if cur.CIContext {
 		t.Error("expected CIContext to be false when no ci-info entry is present")
+	}
+}
+
+func TestDetectState_ReportsDockerContext(t *testing.T) {
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte("claude:\n  session-start:\n    context:\n      - type: docker-compose\n"), 0644)
+
+	cur, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cur.DockerContext {
+		t.Error("expected DockerContext to be true when a docker-compose entry is present")
+	}
+}
+
+func TestDetectState_ReportsNoDockerContext(t *testing.T) {
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte("claude:\n  session-start:\n    context: []\n"), 0644)
+
+	cur, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cur.DockerContext {
+		t.Error("expected DockerContext to be false when no docker-compose entry is present")
 	}
 }

@@ -132,7 +132,7 @@ claude:
 	if err == nil {
 		t.Fatal("expected error for unknown type")
 	}
-	want := `claude.session-start.context[0]: unknown provider type "nonexistent-provider"`
+	want := `validating config: claude.session-start.context[0]: unknown provider type "nonexistent-provider"`
 	if err.Error() != want {
 		t.Errorf("expected error %q, got %q", want, err.Error())
 	}
@@ -149,7 +149,7 @@ claude:
 	if err == nil {
 		t.Fatal("expected error for missing type")
 	}
-	want := `claude.session-start.context[0]: missing required field "type"`
+	want := `validating config: claude.session-start.context[0]: missing required field "type"`
 	if err.Error() != want {
 		t.Errorf("expected error %q, got %q", want, err.Error())
 	}
@@ -167,7 +167,7 @@ claude:
 	if err == nil {
 		t.Fatal("expected error for shell without command")
 	}
-	want := `claude.session-start.context[0]: type "shell" requires "command" field`
+	want := `validating config: claude.session-start.context[0]: type "shell" requires "command" field`
 	if err.Error() != want {
 		t.Errorf("expected error %q, got %q", want, err.Error())
 	}
@@ -184,7 +184,7 @@ git:
 	if err == nil {
 		t.Fatal("expected error for unknown type in git checks")
 	}
-	want := `git.pre-commit.checks[0]: unknown provider type "unknown-check"`
+	want := `validating config: git.pre-commit.checks[0]: unknown provider type "unknown-check"`
 	if err.Error() != want {
 		t.Errorf("expected error %q, got %q", want, err.Error())
 	}
@@ -397,6 +397,54 @@ claude:
 	}
 	if cfg.Claude.SessionStart.Context[0].Type != "ci-info" {
 		t.Errorf("expected type ci-info, got %q", cfg.Claude.SessionStart.Context[0].Type)
+	}
+}
+
+func TestParse_DockerComposeType(t *testing.T) {
+	input := `
+claude:
+  session-start:
+    context:
+      - type: docker-compose
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Claude.SessionStart.Context) != 1 {
+		t.Fatalf("expected 1 context provider, got %d", len(cfg.Claude.SessionStart.Context))
+	}
+	if cfg.Claude.SessionStart.Context[0].Type != "docker-compose" {
+		t.Errorf("expected type docker-compose, got %q", cfg.Claude.SessionStart.Context[0].Type)
+	}
+	if len(cfg.Claude.SessionStart.Context[0].Files) != 0 {
+		t.Errorf("expected no files by default, got %v", cfg.Claude.SessionStart.Context[0].Files)
+	}
+}
+
+func TestParse_DockerComposeWithFiles(t *testing.T) {
+	input := `
+claude:
+  session-start:
+    context:
+      - type: docker-compose
+        files:
+          - docker-compose-services.yml
+          - docker-compose-local-mocks.yml
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	files := cfg.Claude.SessionStart.Context[0].Files
+	if len(files) != 2 {
+		t.Fatalf("expected 2 files, got %d", len(files))
+	}
+	if files[0] != "docker-compose-services.yml" {
+		t.Errorf("expected %q, got %q", "docker-compose-services.yml", files[0])
+	}
+	if files[1] != "docker-compose-local-mocks.yml" {
+		t.Errorf("expected %q, got %q", "docker-compose-local-mocks.yml", files[1])
 	}
 }
 

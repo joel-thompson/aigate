@@ -1,12 +1,14 @@
 package wiring
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 
 	"github.com/joelthompson/aigate/internal/config"
 	"github.com/joelthompson/aigate/internal/provider/ciinfo"
+	"github.com/joelthompson/aigate/internal/provider/dockercompose"
 )
 
 // settingsRelPath is settings.local.json's location relative to the project
@@ -27,7 +29,7 @@ type configStatus struct {
 func loadConfigStatus(path string) configStatus {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return configStatus{}
 		}
 		return configStatus{exists: true, err: err}
@@ -51,7 +53,7 @@ type settingsStatus struct {
 func loadSettingsStatus(path string) settingsStatus {
 	exists := true
 	if _, err := os.Stat(path); err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			exists = false
 		}
 	}
@@ -177,12 +179,20 @@ func (f feature) problemDetail() (detail, path string) {
 	return fmt.Sprintf("%s is present, but %s is missing; %s", have.what, missing.what, consequence), missing.path
 }
 
+// Applicability records which detected-feature checks apply to a project at
+// all, so a feature that can never be a problem here reports "not
+// applicable" rather than "not configured".
+type Applicability struct {
+	CI            bool
+	DockerCompose bool
+}
+
 // snapshot is everything both doctor's report and init's completeness check
 // derive from.
 type snapshot struct {
 	state           state
 	paths           paths
-	ciApplicable    bool
+	applicable      Applicability
 	configUnknown   bool
 	settingsUnknown bool
 }
@@ -219,7 +229,7 @@ func (s snapshot) features() []feature {
 				present: s.state.CIContext,
 				unknown: s.configUnknown,
 			},
-			inapplicable: ciInapplicableReason(s.ciApplicable),
+			inapplicable: ciInapplicableReason(s.applicable.CI),
 		},
 		{
 			label: "Stop prompt",
@@ -256,6 +266,19 @@ func (s snapshot) features() []feature {
 			},
 			remedy: "aigate init --git-hooks",
 		},
+		// Appended last on purpose: doctor's tests address checks by index,
+		// so a new feature slotted in ahead of one silently retargets them.
+		{
+			label: "Docker context",
+			section: artifact{
+				key:     "DockerContext",
+				what:    "docker-compose entry in claude.session-start.context",
+				path:    s.paths.config,
+				present: s.state.DockerContext,
+				unknown: s.configUnknown,
+			},
+			inapplicable: dockerInapplicableReason(s.applicable.DockerCompose),
+		},
 	}
 }
 
@@ -264,6 +287,13 @@ func ciInapplicableReason(ciApplicable bool) string {
 		return ""
 	}
 	return "no .circleci directory"
+}
+
+func dockerInapplicableReason(dockerApplicable bool) string {
+	if dockerApplicable {
+		return ""
+	}
+	return "no compose file in the project root"
 }
 
 // Status is a Check's outcome.
@@ -330,9 +360,12 @@ func Inspect(root string, lookPath func(string) (string, error)) (Report, error)
 	setStatus := loadSettingsStatus(p.settings)
 
 	snap := snapshot{
-		state:           detectStateAt(p),
-		paths:           p,
-		ciApplicable:    ciinfo.Detected(p.root),
+		state: detectStateAt(p),
+		paths: p,
+		applicable: Applicability{
+			CI:            ciinfo.Detected(p.root),
+			DockerCompose: dockercompose.Detected(p.root),
+		},
 		configUnknown:   cfgStatus.exists && cfgStatus.err != nil,
 		settingsUnknown: setStatus.exists && setStatus.err != nil,
 	}
@@ -402,11 +435,11 @@ func settingsCheck(st settingsStatus, p paths) Check {
 // not applicable. This is the conjunction runInit's "everything is already
 // set up" check derives from, so init and doctor can't structurally
 // disagree about what "done" means.
-func Complete(s state, ciApplicable bool) bool {
+func Complete(s state, ap Applicability) bool {
 	if !s.Config {
 		return false
 	}
-	snap := snapshot{state: s, ciApplicable: ciApplicable}
+	snap := snapshot{state: s, applicable: ap}
 	for _, f := range snap.features() {
 		switch f.status() {
 		case StatusOK, StatusNotApplicable:

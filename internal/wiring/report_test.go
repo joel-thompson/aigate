@@ -10,8 +10,8 @@ import (
 )
 
 // setupFullyWired writes a project at dir that Inspect should report as
-// entirely ok (no .circleci, so CI context reports not applicable rather
-// than a problem).
+// entirely ok (no .circleci and no compose file, so the CI-context and
+// Docker-context checks report not applicable rather than a problem).
 func setupFullyWired(t *testing.T, dir string) {
 	t.Helper()
 
@@ -400,6 +400,47 @@ func TestInspect_ReportsCIContextNotConfiguredWhenCircleCIPresent(t *testing.T) 
 	}
 }
 
+func TestInspect_MarksDockerContextNotApplicableWithoutComposeFile(t *testing.T) {
+	dir := t.TempDir()
+	setupFullyWired(t, dir)
+
+	rep, err := Inspect(dir, fakeLookPath("/usr/local/bin/aigate", nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c, ok := findCheck(rep, "Docker context")
+	if !ok {
+		t.Fatal("expected a Docker context check")
+	}
+	if c.Status != StatusNotApplicable {
+		t.Fatalf("expected Docker context to be not applicable without a compose file, got %v", c.Status)
+	}
+}
+
+func TestInspect_ReportsDockerContextNotConfiguredWhenComposeFilePresent(t *testing.T) {
+	dir := t.TempDir()
+	setupFullyWired(t, dir)
+
+	compose := "services:\n  db:\n    image: postgres:16\n"
+	if err := os.WriteFile(filepath.Join(dir, "compose.yaml"), []byte(compose), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Inspect(dir, fakeLookPath("/usr/local/bin/aigate", nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c, ok := findCheck(rep, "Docker context")
+	if !ok {
+		t.Fatal("expected a Docker context check")
+	}
+	if c.Status != StatusNotConfigured {
+		t.Fatalf("expected Docker context to be not configured when a compose file exists and no docker-compose entry does, got %v", c.Status)
+	}
+}
+
 func TestInspect_ResolvesEveryPathUnderTheGivenRoot(t *testing.T) {
 	dir := t.TempDir()
 	setupFullyWired(t, dir)
@@ -433,7 +474,7 @@ func TestComplete_TrueWhenFullyWired(t *testing.T) {
 		Config: true, SessionHook: true, SessionContext: true,
 		StopHook: true, StopPrompt: true, GitHook: true, PreCommitChecks: true,
 	}
-	if !Complete(s, false) {
+	if !Complete(s, Applicability{}) {
 		t.Error("expected Complete to be true when every field is wired and CI isn't applicable")
 	}
 }
@@ -443,7 +484,7 @@ func TestComplete_FalseWhenOneHalfMissing(t *testing.T) {
 		Config: true, SessionHook: true, SessionContext: true,
 		StopHook: true, StopPrompt: false, GitHook: true, PreCommitChecks: true,
 	}
-	if Complete(s, false) {
+	if Complete(s, Applicability{}) {
 		t.Error("expected Complete to be false when one half of a pair is missing")
 	}
 }
@@ -453,7 +494,7 @@ func TestComplete_FalseWhenConfigMissing(t *testing.T) {
 		SessionHook: true, SessionContext: true,
 		StopHook: true, StopPrompt: true, GitHook: true, PreCommitChecks: true,
 	}
-	if Complete(s, false) {
+	if Complete(s, Applicability{}) {
 		t.Error("expected Complete to be false when the config file doesn't exist")
 	}
 }
@@ -464,7 +505,7 @@ func TestComplete_IgnoresCIContextWhenNotApplicable(t *testing.T) {
 		StopHook: true, StopPrompt: true, GitHook: true, PreCommitChecks: true,
 		CIContext: false,
 	}
-	if !Complete(s, false) {
+	if !Complete(s, Applicability{}) {
 		t.Error("expected Complete to be true when CI context is missing but not applicable")
 	}
 }
@@ -475,7 +516,7 @@ func TestComplete_FalseWhenCIContextMissingAndApplicable(t *testing.T) {
 		StopHook: true, StopPrompt: true, GitHook: true, PreCommitChecks: true,
 		CIContext: false,
 	}
-	if Complete(s, true) {
+	if Complete(s, Applicability{CI: true}) {
 		t.Error("expected Complete to be false when CI is applicable but ci-info is missing")
 	}
 }

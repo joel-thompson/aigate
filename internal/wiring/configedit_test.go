@@ -566,6 +566,116 @@ func TestMergeCIContext_NoContextListCases(t *testing.T) {
 	}
 }
 
+// mergeDockerContextOK runs mergeDockerContext and fails on error or on
+// ok == false.
+func mergeDockerContextOK(t *testing.T, before string) string {
+	t.Helper()
+	after, ok, err := mergeDockerContext([]byte(before))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !ok {
+		t.Fatal("expected ok=true")
+	}
+	return string(after)
+}
+
+func TestMergeDockerContext_AppendsAtListIndentTwoSpace(t *testing.T) {
+	before := `claude:
+  session-start:
+    context:
+      - type: project-structure
+        max_depth: 3
+`
+	after := mergeDockerContextOK(t, before)
+	assertOriginalLinesIntact(t, before, after)
+	if !strings.Contains(after, "\n      - type: docker-compose\n") {
+		t.Errorf("expected the new entry indented to match existing list items, got:\n%s", after)
+	}
+
+	cfg, err := config.Parse([]byte(after))
+	if err != nil {
+		t.Fatalf("merged output failed to parse: %v", err)
+	}
+	found := false
+	for _, p := range cfg.Claude.SessionStart.Context {
+		if p.Type == "docker-compose" {
+			found = true
+		}
+	}
+	if !found {
+		t.Error("expected docker-compose to be present in the merged config")
+	}
+}
+
+func TestMergeDockerContext_IdempotentWhenAlreadyPresent(t *testing.T) {
+	before := `claude:
+  session-start:
+    context:
+      - type: docker-compose
+`
+	after, ok, err := mergeDockerContext([]byte(before))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if ok {
+		t.Fatal("expected ok=false when docker-compose is already present")
+	}
+	if string(after) != before {
+		t.Errorf("expected output unchanged, got:\n%s", after)
+	}
+}
+
+func TestMergeDockerContext_NoContextList(t *testing.T) {
+	before := "claude:\n  session-start: {}\n"
+
+	after, ok, err := mergeDockerContext([]byte(before))
+	if !errors.Is(err, errNoContextList) {
+		t.Fatalf("expected errNoContextList, got: %v", err)
+	}
+	if ok {
+		t.Error("expected ok=false")
+	}
+	if string(after) != before {
+		t.Errorf("expected input returned unchanged, got:\n%s", after)
+	}
+}
+
+// TestMergeContextEntry_CIAndDockerCoexist is the point of parameterising
+// the splice rather than cloning it: each merge only claims its own entry as
+// "already present", so running both leaves both in the list.
+func TestMergeContextEntry_CIAndDockerCoexist(t *testing.T) {
+	before := `claude:
+  session-start:
+    context:
+      - type: project-structure
+`
+	withCI := mergeCIContextOK(t, before)
+	after := mergeDockerContextOK(t, withCI)
+
+	assertOriginalLinesIntact(t, before, after)
+	if !strings.Contains(after, "\n      - type: ci-info\n") {
+		t.Errorf("expected the ci-info entry to survive the docker merge, got:\n%s", after)
+	}
+	if !strings.Contains(after, "\n      - type: docker-compose\n") {
+		t.Errorf("expected the docker-compose entry to be appended, got:\n%s", after)
+	}
+
+	cfg, err := config.Parse([]byte(after))
+	if err != nil {
+		t.Fatalf("merged output failed to parse: %v", err)
+	}
+	var types []string
+	for _, p := range cfg.Claude.SessionStart.Context {
+		types = append(types, p.Type)
+	}
+	joined := strings.Join(types, ",")
+	want := "project-structure,ci-info,docker-compose"
+	if joined != want {
+		t.Errorf("expected context types %q, got %q", want, joined)
+	}
+}
+
 func TestFindBlockEnd_AtIndentZero(t *testing.T) {
 	lines := strings.Split(`claude:
   session-start:

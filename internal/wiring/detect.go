@@ -58,6 +58,7 @@ type state struct {
 	GitHook         bool
 	PreCommitChecks bool
 	CIContext       bool
+	DockerContext   bool
 }
 
 // detectStateAt inspects the project at p for already-configured aigate
@@ -72,6 +73,7 @@ func detectStateAt(p paths) state {
 		GitHook:         gitHookInstalled(p.gitHook),
 		PreCommitChecks: preCommitChecksInstalled(p.config),
 		CIContext:       ciContextInstalled(p.config),
+		DockerContext:   dockerContextInstalled(p.config),
 	}
 }
 
@@ -146,6 +148,13 @@ func preCommitChecksInstalled(configPath string) bool {
 // the check in mergeCIContext (configedit.go).
 func ciContextInstalled(configPath string) bool {
 	return configSectionInstalled(configPath, ciContextPresent)
+}
+
+// dockerContextInstalled reports whether .aigate.yml's
+// claude.session-start.context already has a docker-compose entry. This
+// mirrors the check in mergeDockerContext (configedit.go).
+func dockerContextInstalled(configPath string) bool {
+	return configSectionInstalled(configPath, dockerContextPresent)
 }
 
 // gitHookInstalled reports whether the pre-commit hook at hookPath already

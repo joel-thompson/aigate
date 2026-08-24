@@ -10,6 +10,7 @@ import (
 	"github.com/joelthompson/aigate/internal/config"
 	"github.com/joelthompson/aigate/internal/provider"
 	"github.com/joelthompson/aigate/internal/provider/ciinfo"
+	"github.com/joelthompson/aigate/internal/provider/dockercompose"
 	"github.com/joelthompson/aigate/internal/provider/projectstructure"
 	"github.com/joelthompson/aigate/internal/provider/shell"
 	"github.com/joelthompson/aigate/internal/runner"
@@ -31,7 +32,7 @@ func NewCommand() *cobra.Command {
 				if errors.Is(err, os.ErrNotExist) {
 					return nil
 				}
-				return err
+				return fmt.Errorf("loading config: %w", err)
 			}
 
 			providers := buildProviders(cfg)
@@ -77,6 +78,8 @@ func buildProviders(cfg *config.Config) []provider.Provider {
 			})
 		case "ci-info":
 			providers = append(providers, &ciinfo.Provider{})
+		case "docker-compose":
+			providers = append(providers, &dockercompose.Provider{Files: pc.Files})
 		default:
 			providers = append(providers, &unsupportedProvider{typeName: pc.Type})
 		}

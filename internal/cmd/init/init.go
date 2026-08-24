@@ -2,6 +2,7 @@ package initcmd
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
 	"path/filepath"
@@ -9,17 +10,19 @@ import (
 
 	"github.com/joelthompson/aigate/internal/config"
 	"github.com/joelthompson/aigate/internal/provider/ciinfo"
+	"github.com/joelthompson/aigate/internal/provider/dockercompose"
 	"github.com/joelthompson/aigate/internal/wiring"
 	"github.com/spf13/cobra"
 )
 
 // steps holds which init steps are requested, whether from flags or prompts.
 type steps struct {
-	config      bool
-	claudeHooks bool
-	ciContext   bool
-	stopPrompt  bool
-	gitHooks    bool
+	config        bool
+	claudeHooks   bool
+	ciContext     bool
+	dockerContext bool
+	stopPrompt    bool
+	gitHooks      bool
 }
 
 func NewCommand() *cobra.Command {
@@ -48,10 +51,10 @@ func NewCommand() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().BoolVar(&flags.config, "config", false, "Create .aigate.yml config file")
-	cmd.Flags().BoolVar(&flags.claudeHooks, "claude-hooks", false, "Register Claude Code hooks in .claude/settings.local.json")
-	cmd.Flags().BoolVar(&flags.stopPrompt, "stop-prompt", false, "Register Claude Code stop hook for concise recaps")
-	cmd.Flags().BoolVar(&flags.gitHooks, "git-hooks", false, "Set up git pre-commit hook")
+	cmd.Flags().BoolVar(&flags.config, "config", false, "create .aigate.yml config file")
+	cmd.Flags().BoolVar(&flags.claudeHooks, "claude-hooks", false, "register Claude Code hooks in .claude/settings.local.json")
+	cmd.Flags().BoolVar(&flags.stopPrompt, "stop-prompt", false, "register Claude Code stop hook for concise recaps")
+	cmd.Flags().BoolVar(&flags.gitHooks, "git-hooks", false, "set up git pre-commit hook")
 
 	return cmd
 }
@@ -65,14 +68,15 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 	// identically to the interactive one, even though wiring.Detect (and thus
 	// the prompt) is skipped in that mode.
 	ciDetected := ciinfo.Detected(".")
+	dockerDetected := dockercompose.Detected(".")
 
 	if !nonInteractive {
 		cur, err := wiring.Detect(".")
 		if err != nil {
-			return err
+			return fmt.Errorf("detecting wiring: %w", err)
 		}
 
-		if wiring.Complete(cur, ciDetected) {
+		if wiring.Complete(cur, wiring.Applicability{CI: ciDetected, DockerCompose: dockerDetected}) {
 			fmt.Fprintln(w, "Everything is already set up.")
 			fmt.Fprintln(w)
 		}
@@ -82,10 +86,14 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 		if ciDetected {
 			do.ciContext = askUnlessDone(prompter, cur.CIContext, "Add CircleCI info to Claude's session context?")
 		}
+		if dockerDetected {
+			do.dockerContext = askUnlessDone(prompter, cur.DockerContext, "Add Docker stack info to Claude's session context?")
+		}
 		do.stopPrompt = askUnlessDone(prompter, cur.StopHook && cur.StopPrompt, "Register Claude Code stop hook for concise recaps?")
 		do.gitHooks = askUnlessDone(prompter, cur.GitHook && cur.PreCommitChecks, "Set up git pre-commit hook?")
 	} else {
 		do.ciContext = do.claudeHooks && ciDetected
+		do.dockerContext = do.claudeHooks && dockerDetected
 	}
 
 	var hadError bool
@@ -130,6 +138,19 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 				return wiring.StepResult{Err: err}
 			}
 			return wiring.EnableCIContext(configPath)
+		})
+		if result.Err != nil {
+			hadError = true
+		}
+	}
+
+	if dockerDetected {
+		result = printStep(w, "Docker context", do.dockerContext, func() wiring.StepResult {
+			configPath, err := filepath.Abs(config.DefaultConfigFile)
+			if err != nil {
+				return wiring.StepResult{Err: err}
+			}
+			return wiring.EnableDockerContext(configPath)
 		})
 		if result.Err != nil {
 			hadError = true
@@ -181,7 +202,7 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 	}
 
 	if hadError {
-		return fmt.Errorf("one or more steps failed")
+		return errors.New("one or more steps failed")
 	}
 	return nil
 }

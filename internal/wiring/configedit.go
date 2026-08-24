@@ -35,7 +35,11 @@ const preCommitSection = `pre-commit:
 // by the CI-context init step.
 const ciContextEntry = "- type: ci-info"
 
-// errNoContextList is returned by mergeCIContext when
+// dockerContextEntry is the list item spliced into
+// claude.session-start.context by the Docker-context init step.
+const dockerContextEntry = "- type: docker-compose"
+
+// errNoContextList is returned by mergeContextEntry when
 // claude.session-start.context doesn't already exist as a block-style
 // sequence to splice an item into.
 var errNoContextList = errors.New(`claude.session-start.context is not a list`)
@@ -67,18 +71,30 @@ func preCommitPresent(cfg *config.Config) bool {
 	return cfg.Git != nil && cfg.Git.PreCommit != nil
 }
 
-// ciContextPresent reports whether claude.session-start.context already has
-// a ci-info entry.
-func ciContextPresent(cfg *config.Config) bool {
+// contextEntryPresent reports whether claude.session-start.context already
+// has an entry of the given provider type.
+func contextEntryPresent(cfg *config.Config, providerType string) bool {
 	if cfg.Claude == nil || cfg.Claude.SessionStart == nil {
 		return false
 	}
 	for _, p := range cfg.Claude.SessionStart.Context {
-		if p.Type == "ci-info" {
+		if p.Type == providerType {
 			return true
 		}
 	}
 	return false
+}
+
+// ciContextPresent reports whether claude.session-start.context already has
+// a ci-info entry.
+func ciContextPresent(cfg *config.Config) bool {
+	return contextEntryPresent(cfg, "ci-info")
+}
+
+// dockerContextPresent reports whether claude.session-start.context already
+// has a docker-compose entry.
+func dockerContextPresent(cfg *config.Config) bool {
+	return contextEntryPresent(cfg, "docker-compose")
 }
 
 // mergeSessionStart returns data with a claude.session-start section
@@ -100,16 +116,29 @@ func mergePreCommit(data []byte) ([]byte, bool, error) {
 }
 
 // mergeCIContext returns data with a "- type: ci-info" item appended to the
+// claude.session-start.context list.
+func mergeCIContext(data []byte) ([]byte, bool, error) {
+	return mergeContextEntry(data, ciContextEntry, ciContextPresent)
+}
+
+// mergeDockerContext returns data with a "- type: docker-compose" item
+// appended to the claude.session-start.context list.
+func mergeDockerContext(data []byte) ([]byte, bool, error) {
+	return mergeContextEntry(data, dockerContextEntry, dockerContextPresent)
+}
+
+// mergeContextEntry returns data with entry appended to the
 // claude.session-start.context list. Unlike mergeSection, the target here is
 // a list item nested inside a top-level block, not a second-level block
 // under a top-level key, so it walks the node tree itself rather than
-// delegating to mergeSection.
-func mergeCIContext(data []byte) ([]byte, bool, error) {
+// delegating to mergeSection. present is entry's own presence predicate, so
+// the caller decides what "already there" means.
+func mergeContextEntry(data []byte, entry string, present func(*config.Config) bool) ([]byte, bool, error) {
 	cfg, err := config.Parse(data)
 	if err != nil {
 		return data, false, err
 	}
-	if ciContextPresent(cfg) {
+	if present(cfg) {
 		return data, false, nil
 	}
 
@@ -144,7 +173,7 @@ func mergeCIContext(data []byte) ([]byte, bool, error) {
 	}
 
 	insertAt := findBlockEnd(lines, contextKey.Line, contextKey.Column-1)
-	entryLines := indentLines([]string{ciContextEntry}, indent)
+	entryLines := indentLines([]string{entry}, indent)
 
 	out := make([]string, 0, len(lines)+len(entryLines))
 	out = append(out, lines[:insertAt]...)
@@ -350,13 +379,28 @@ func EnableCIContext(configPath string) StepResult {
 	return res
 }
 
+// EnableDockerContext adds a docker-compose entry to
+// claude.session-start.context in .aigate.yml. Like EnableCIContext, a
+// context list that isn't in a splice-able shape is a skip rather than an
+// error: the fix is a one-line manual edit, not something worth failing init
+// over.
+func EnableDockerContext(configPath string) StepResult {
+	res := editConfig(configPath, mergeDockerContext,
+		"added docker-compose to claude.session-start.context",
+		"docker-compose already in claude.session-start.context")
+	if res.Err != nil && errors.Is(res.Err, errNoContextList) {
+		return StepResult{Skipped: true, Reason: `claude.session-start.context not found (add "- type: docker-compose" by hand)`}
+	}
+	return res
+}
+
 // editConfig reads configPath, runs merge over its contents, and writes the
 // result back. It reports the shared skip/error cases so each Enable*
 // function only needs to supply its merge func and result strings.
 func editConfig(configPath string, merge func([]byte) ([]byte, bool, error), action, alreadyReason string) StepResult {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return StepResult{Skipped: true, Reason: fmt.Sprintf("%s not found (rerun with --config to create one)", filepath.Base(configPath))}
 		}
 		return StepResult{Err: fmt.Errorf("reading %s: %w", filepath.Base(configPath), err)}

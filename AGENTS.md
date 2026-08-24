@@ -34,9 +34,15 @@ failed providers' output rather than surfacing raw errors to Claude.
 **The stop hook is special.** Blocks with exit 2 and the prompt on *stderr*, never stdout; sets
 `SilenceErrors` so cobra's banner doesn't leak into the recap instruction.
 
-**Adding a provider** touches three places: the package under `internal/provider/`, `validTypes`
-in `internal/config/config.go`, and the `buildProviders`/`buildChecks` switch in the command that
-uses it. Unknown types fail at `Run`, not at wiring time.
+**Adding a provider** has two tiers. A plain provider touches three places: the package under
+`internal/provider/`, `validTypes` in `internal/config/config.go`, and the
+`buildProviders`/`buildChecks` switch in the command that uses it. Unknown types fail at `Run`,
+not at wiring time. A *detected, opt-in* provider — one `init` offers when it spots the tool and
+`doctor` then reports on, as `ci-info` and `docker-compose` do — touches four more:
+`wiring/configedit.go` (an `Enable*` splicing its list item), `wiring/detect.go` (a `state` field),
+`wiring/report.go` (an `Applicability` field plus a `features()` entry), and
+`internal/cmd/init/init.go` (detection, prompt, step). The provider package exports a
+`Detected(root) bool` that `init` and `doctor` share, so the predicate is defined once.
 
 **Config edits splice raw text lines.** Never re-marshal `.aigate.yml` — it would destroy comments
 and formatting. `KnownFields(true)` makes an unknown YAML key a hard error.
@@ -77,6 +83,13 @@ accumulate state.
 
 **No secrets in `.aigate.yml`.** It's committed, and the `shell` provider executes it. Secrets
 come from the environment at exec time, not config.
+
+**No secrets out of a provider either.** Provider output goes straight into the model's context,
+so a probe that can see a credential must not be able to print one. `docker compose config
+--format json` resolves every service's `environment` in full, credentials included — so
+`dockercompose`'s decode struct simply omits the field, making the leak structurally impossible
+rather than a rule someone has to remember. Probes there return `(T, bool)` rather than an
+`error` for the same reason: an `*exec.ExitError` carries the child's captured stderr.
 
 **Group commands must reject unknown subcommands.** `RunE` that errors on unknown args, plus
 `FParseErrWhitelist{UnknownFlags: true}`, on `claude` and `git`. Without it an unknown subcommand
