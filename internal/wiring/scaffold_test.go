@@ -1,4 +1,4 @@
-package wiring_test
+package wiring
 
 import (
 	"encoding/json"
@@ -8,14 +8,13 @@ import (
 	"testing"
 
 	"github.com/joelthompson/aigate/internal/config"
-	"github.com/joelthompson/aigate/internal/wiring"
 )
 
 func TestScaffoldConfig_CreatesFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".aigate.yml")
 
-	result := wiring.ScaffoldConfig(path)
+	result := ScaffoldConfig(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected file to be created, got: %s", result)
@@ -41,7 +40,7 @@ func TestScaffoldConfig_SkipsIfExists(t *testing.T) {
 
 	os.WriteFile(path, []byte("existing: true\n"), 0644)
 
-	result := wiring.ScaffoldConfig(path)
+	result := ScaffoldConfig(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when file exists")
@@ -60,7 +59,7 @@ func TestScaffoldConfig_DefaultConfigIsValid(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".aigate.yml")
 
-	wiring.ScaffoldConfig(path)
+	ScaffoldConfig(path)
 
 	_, err := config.Load(path)
 	if err != nil {
@@ -72,7 +71,7 @@ func TestRegisterClaudeHooks_CreatesNewSettings(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.local.json")
 
-	result := wiring.RegisterClaudeHooks(path)
+	result := RegisterClaudeHooks(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected hooks to be registered, got: %s", result)
@@ -93,7 +92,7 @@ func TestRegisterClaudeHooks_AppendsToExistingSettings(t *testing.T) {
 	data, _ := json.MarshalIndent(existing, "", "  ")
 	os.WriteFile(path, data, 0644)
 
-	result := wiring.RegisterClaudeHooks(path)
+	result := RegisterClaudeHooks(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected hooks to be registered, got: %s", result)
@@ -131,7 +130,7 @@ func TestRegisterClaudeHooks_AppendsToExistingHooksArray(t *testing.T) {
 	data, _ := json.MarshalIndent(existing, "", "  ")
 	os.WriteFile(path, data, 0644)
 
-	result := wiring.RegisterClaudeHooks(path)
+	result := RegisterClaudeHooks(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected hooks to be appended, got: %s", result)
@@ -169,7 +168,7 @@ func TestRegisterClaudeHooks_SkipsIfAigateAlreadyRegistered(t *testing.T) {
 	data, _ := json.MarshalIndent(existing, "", "  ")
 	os.WriteFile(path, data, 0644)
 
-	result := wiring.RegisterClaudeHooks(path)
+	result := RegisterClaudeHooks(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when aigate already registered")
@@ -182,7 +181,7 @@ func TestSetupGitHook_CreatesNewHook(t *testing.T) {
 	os.MkdirAll(hooksDir, 0755)
 	path := filepath.Join(hooksDir, "pre-commit")
 
-	result := wiring.SetupGitHook(path)
+	result := SetupGitHook(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected hook to be created, got: %s", result)
@@ -216,7 +215,7 @@ func TestSetupGitHook_SkipsIfAigateAlreadyPresent(t *testing.T) {
 	existing := "#!/bin/sh\naigate git pre-commit\n"
 	os.WriteFile(path, []byte(existing), 0755)
 
-	result := wiring.SetupGitHook(path)
+	result := SetupGitHook(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when aigate already in hook")
@@ -237,7 +236,7 @@ func TestSetupGitHook_AppendsToExistingHook(t *testing.T) {
 	existing := "#!/bin/sh\nsome-other-tool check\n"
 	os.WriteFile(path, []byte(existing), 0755)
 
-	result := wiring.SetupGitHook(path)
+	result := SetupGitHook(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected aigate to be appended, got: %s", result)
@@ -257,7 +256,7 @@ func TestSetupGitHook_NoGitDir(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".git", "hooks", "pre-commit")
 
-	result := wiring.SetupGitHook(path)
+	result := SetupGitHook(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when .git/hooks dir doesn't exist")
@@ -273,7 +272,7 @@ func TestSetupGitHook_ReadErrorIsNotSwallowed(t *testing.T) {
 	// Create unreadable file
 	os.WriteFile(path, []byte("#!/bin/sh\n"), 0000)
 
-	result := wiring.SetupGitHook(path)
+	result := SetupGitHook(path)
 
 	if result.Err == nil {
 		t.Fatal("expected error for unreadable hook file, got none")
@@ -330,7 +329,7 @@ func TestRegisterStopHook_RegistersStopHook(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.local.json")
 
-	result := wiring.RegisterStopHook(path)
+	result := RegisterStopHook(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected hook to be registered, got: %s", result)
@@ -343,12 +342,12 @@ func TestRegisterStopHook_PreservesSessionStartHook(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.local.json")
 
-	result := wiring.RegisterClaudeHooks(path)
+	result := RegisterClaudeHooks(path)
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected SessionStart hook to be registered, got: %s", result)
 	}
 
-	result = wiring.RegisterStopHook(path)
+	result = RegisterStopHook(path)
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected Stop hook to be registered, got: %s", result)
 	}
@@ -361,8 +360,8 @@ func TestRegisterStopHook_SkipsIfAlreadyRegistered(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "settings.local.json")
 
-	wiring.RegisterStopHook(path)
-	result := wiring.RegisterStopHook(path)
+	RegisterStopHook(path)
+	result := RegisterStopHook(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when Stop hook already registered")

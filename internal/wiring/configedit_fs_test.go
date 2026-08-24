@@ -1,4 +1,4 @@
-package wiring_test
+package wiring
 
 import (
 	"os"
@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/joelthompson/aigate/internal/config"
-	"github.com/joelthompson/aigate/internal/wiring"
 )
 
 func TestEnableStopPrompt_WritesMergedFile(t *testing.T) {
@@ -16,7 +15,7 @@ func TestEnableStopPrompt_WritesMergedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := wiring.EnableStopPrompt(path)
+	result := EnableStopPrompt(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected section to be added, got: %s", result)
@@ -35,7 +34,7 @@ func TestEnableStopPrompt_SkipsWhenConfigMissing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".aigate.yml")
 
-	result := wiring.EnableStopPrompt(path)
+	result := EnableStopPrompt(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when config file is missing")
@@ -57,7 +56,7 @@ func TestEnableStopPrompt_SkipsWhenAlreadyPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := wiring.EnableStopPrompt(path)
+	result := EnableStopPrompt(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when claude.stop-prompt is already present")
@@ -80,7 +79,7 @@ func TestEnableStopPrompt_LeavesFileUntouchedOnParseError(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := wiring.EnableStopPrompt(path)
+	result := EnableStopPrompt(path)
 
 	if result.Err == nil {
 		t.Fatal("expected an error for unparseable config")
@@ -103,7 +102,7 @@ func TestEnableCIContext_WritesMergedFile(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := wiring.EnableCIContext(path)
+	result := EnableCIContext(path)
 
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected ci-info to be added, got: %s", result)
@@ -132,7 +131,7 @@ func TestEnableCIContext_SkipsWhenAlreadyPresent(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := wiring.EnableCIContext(path)
+	result := EnableCIContext(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when ci-info is already present")
@@ -151,7 +150,7 @@ func TestEnableCIContext_SkipsWhenConfigMissing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, ".aigate.yml")
 
-	result := wiring.EnableCIContext(path)
+	result := EnableCIContext(path)
 
 	if !result.Skipped {
 		t.Fatal("expected skip when config file is missing")
@@ -169,7 +168,7 @@ func TestEnableCIContext_TranslatesNoContextListToSkip(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := wiring.EnableCIContext(path)
+	result := EnableCIContext(path)
 
 	if result.Err != nil {
 		t.Fatalf("expected the missing-context-list error translated to a skip, got error: %v", result.Err)
@@ -198,7 +197,7 @@ func TestEnableCIContext_PreservesFileMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := wiring.EnableCIContext(path)
+	result := EnableCIContext(path)
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected ci-info to be added, got: %s", result)
 	}
@@ -219,7 +218,7 @@ func TestEnableStopPrompt_PreservesFileMode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	result := wiring.EnableStopPrompt(path)
+	result := EnableStopPrompt(path)
 	if result.Skipped || result.Err != nil {
 		t.Fatalf("expected section to be added, got: %s", result)
 	}

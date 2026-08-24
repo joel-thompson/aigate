@@ -2,6 +2,7 @@ package ciinfo
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -23,9 +24,28 @@ func makeFiles(t *testing.T, root string, files map[string]string) {
 	}
 }
 
+// failingCLI stands in for a missing/broken circleci CLI so the existing
+// tests in this file, which predate the CLI section, never depend on
+// whether the machine running them actually has circleci on $PATH.
+func failingCLI(ctx context.Context, args ...string) (string, error) {
+	return "", errors.New("circleci: command not found")
+}
+
 func run(t *testing.T, root string) *provider.Result {
 	t.Helper()
-	p := &Provider{Root: root}
+	p := &Provider{Root: root, runCLI: failingCLI}
+	result, err := p.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	return result
+}
+
+// runWithCLI is run's counterpart for tests exercising the CLI section: it
+// injects runCLI directly instead of always failing it.
+func runWithCLI(t *testing.T, root string, runCLI cliRunner) *provider.Result {
+	t.Helper()
+	p := &Provider{Root: root, runCLI: runCLI}
 	result, err := p.Run(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -442,7 +462,7 @@ workflows:
 		".circleci/broken.yml": "jobs: [this is not: valid: mapping\n",
 	})
 
-	p := &Provider{Root: root}
+	p := &Provider{Root: root, runCLI: failingCLI}
 	result, err := p.Run(context.Background())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)

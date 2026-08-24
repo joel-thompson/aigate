@@ -2,6 +2,7 @@ package wiring
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -137,7 +138,7 @@ func containsCommand(entries []any, command string) bool {
 func readOrCreateSettings(path string) (map[string]any, error) {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		if os.IsNotExist(err) {
+		if errors.Is(err, os.ErrNotExist) {
 			return map[string]any{}, nil
 		}
 		return nil, err
@@ -159,12 +160,12 @@ func hookHasAigate(content string) bool {
 
 func SetupGitHook(hookPath string) StepResult {
 	dir := filepath.Dir(hookPath)
-	if _, err := os.Stat(dir); os.IsNotExist(err) {
+	if _, err := os.Stat(dir); errors.Is(err, os.ErrNotExist) {
 		return StepResult{Skipped: true, Reason: ".git/hooks directory not found (not a git repo?)"}
 	}
 
 	existing, err := os.ReadFile(hookPath)
-	if err != nil && !os.IsNotExist(err) {
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
 		return StepResult{Err: fmt.Errorf("reading existing hook: %w", err)}
 	}
 

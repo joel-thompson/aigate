@@ -30,7 +30,7 @@ func NewCommand() *cobra.Command {
 				if errors.Is(err, os.ErrNotExist) {
 					return nil
 				}
-				return err
+				return fmt.Errorf("loading config: %w", err)
 			}
 
 			if !hasChecks(cfg) {
@@ -39,7 +39,7 @@ func NewCommand() *cobra.Command {
 
 			diff, err := stagedDiff(cmd.Context())
 			if err != nil {
-				return err
+				return fmt.Errorf("computing staged diff: %w", err)
 			}
 
 			checks := buildChecks(cfg, diff)

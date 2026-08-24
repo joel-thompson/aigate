@@ -139,7 +139,7 @@ func TestRender_PluralizesProblemCount(t *testing.T) {
 }
 
 func TestRunDoctor_ReturnsExitCodeOneWhenAProblemIsFound(t *testing.T) {
-	chdir(t, t.TempDir())
+	t.Chdir(t.TempDir())
 
 	var out, errw bytes.Buffer
 	err := runDoctor(&out, &errw, func(string) (string, error) { return "", errors.New("not found") })
@@ -158,7 +158,7 @@ func TestRunDoctor_ReturnsExitCodeOneWhenAProblemIsFound(t *testing.T) {
 func TestRunDoctor_ReturnsNilWhenEverythingIsWired(t *testing.T) {
 	dir := t.TempDir()
 	seedFullyWiredProject(t, dir)
-	chdir(t, dir)
+	t.Chdir(dir)
 
 	var out, errw bytes.Buffer
 	err := runDoctor(&out, &errw, func(string) (string, error) { return "/usr/local/bin/aigate", nil })
@@ -176,7 +176,7 @@ func TestRunDoctor_ReturnsNilWhenEverythingIsWired(t *testing.T) {
 
 func TestDoctorCommand_ExitsNonZeroWithoutCobraErrorBanner(t *testing.T) {
 	dir := t.TempDir()
-	chdir(t, dir)
+	t.Chdir(dir)
 
 	cmd := NewCommand()
 	var out, errw bytes.Buffer
@@ -195,11 +195,6 @@ func TestDoctorCommand_ExitsNonZeroWithoutCobraErrorBanner(t *testing.T) {
 	if strings.Contains(errw.String(), "Error:") {
 		t.Errorf("expected no cobra error banner on stderr, got: %s", errw.String())
 	}
-}
-
-func chdir(t *testing.T, dir string) {
-	t.Helper()
-	t.Chdir(dir)
 }
 
 func seedFullyWiredProject(t *testing.T, dir string) {

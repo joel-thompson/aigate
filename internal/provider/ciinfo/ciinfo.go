@@ -1,7 +1,8 @@
 // Package ciinfo provides session-start context describing a project's CI
-// setup. Only CircleCI is implemented today; the provider type is the
-// generic "ci-info" so other CI systems can be added later without a config
-// key rename.
+// setup: a summary of its CircleCI config, plus — when the circleci CLI is
+// installed — its version and a pointer to its own help. Only CircleCI is
+// implemented today; the provider type is the generic "ci-info" so other CI
+// systems can be added later without a config key rename.
 package ciinfo
 
 import (
@@ -32,12 +33,25 @@ var defaultContinuePath = circleciPath("continue_config.yml")
 
 type Provider struct {
 	Root string
+
+	// runCLI shells out to the circleci CLI. Injectable so tests never
+	// depend on whether the machine running them has the CLI installed; nil
+	// uses execCLI.
+	runCLI cliRunner
+}
+
+// cliRunner returns p.runCLI, defaulting to execCLI.
+func (p *Provider) cliRunner() cliRunner {
+	if p.runCLI != nil {
+		return p.runCLI
+	}
+	return execCLI
 }
 
 // rawConfig is the subset of a CircleCI config aigate cares about. Decoding
 // is lenient (no KnownFields): anything else in the file is ignored.
 type rawConfig struct {
-	Version   any            `yaml:"version"`   // 2.1 parses as float, "2.1" as string
+	Version   any            `yaml:"version"` // 2.1 parses as float, "2.1" as string
 	Setup     bool           `yaml:"setup"`
 	Jobs      map[string]any `yaml:"jobs"`
 	Workflows map[string]any `yaml:"workflows"`
@@ -82,11 +96,18 @@ func (p *Provider) Run(ctx context.Context) (*provider.Result, error) {
 	}
 
 	entryName := pickEntry(files, configLike)
+	var out string
 	if entryName == "" {
-		return &provider.Result{Label: label, Output: noEntryOutput(files, configLike)}, nil
+		out = noEntryOutput(files, configLike)
+	} else {
+		out = entryOutput(root, files, configLike, entryName)
 	}
 
-	return &provider.Result{Label: label, Output: entryOutput(root, files, configLike, entryName)}, nil
+	if cli := cliSection(ctx, p.cliRunner()); cli != "" {
+		out += "\n" + cli
+	}
+
+	return &provider.Result{Label: label, Output: out}, nil
 }
 
 // Detected reports whether root has a CircleCI setup aigate can summarize.
