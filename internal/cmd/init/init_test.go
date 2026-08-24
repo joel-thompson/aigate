@@ -357,6 +357,7 @@ claude:
       # - type: shell
       #   command: "go-task --list"
       #   label: "Available tasks"
+      - type: git-state
   stop-prompt:
     enabled: true
     # Fed back to Claude when it finishes responding.
@@ -420,6 +421,7 @@ claude:
       #   command: "go-task --list"
       #   label: "Available tasks"
       - type: ci-info
+      - type: git-state
   stop-prompt:
     enabled: true
     # Fed back to Claude when it finishes responding.
@@ -544,6 +546,7 @@ claude:
       #   command: "go-task --list"
       #   label: "Available tasks"
       - type: docker-compose
+      - type: git-state
   stop-prompt:
     enabled: true
     # Fed back to Claude when it finishes responding.

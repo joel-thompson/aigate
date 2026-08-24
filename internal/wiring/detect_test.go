@@ -403,3 +403,66 @@ func TestDetectState_ReportsNoDockerContext(t *testing.T) {
 		t.Error("expected DockerContext to be false when no docker-compose entry is present")
 	}
 }
+
+func TestGitStateContextInstalled_TrueWhenSet(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".aigate.yml")
+	os.WriteFile(path, []byte("claude:\n  session-start:\n    context:\n      - type: git-state\n"), 0644)
+
+	if !gitStateContextInstalled(path) {
+		t.Error("expected gitStateContextInstalled to be true when a git-state entry is present")
+	}
+}
+
+func TestGitStateContextInstalled_FalseWhenAbsent(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".aigate.yml")
+	os.WriteFile(path, []byte("claude:\n  session-start:\n    context:\n      - type: project-structure\n"), 0644)
+
+	if gitStateContextInstalled(path) {
+		t.Error("expected gitStateContextInstalled to be false when no git-state entry is present")
+	}
+}
+
+func TestGitStateContextInstalled_FalseWhenConfigMissing(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".aigate.yml")
+
+	if gitStateContextInstalled(path) {
+		t.Error("expected gitStateContextInstalled to be false when the config file doesn't exist")
+	}
+}
+
+func TestGitStateContextInstalled_FalseOnUnparseableYAML(t *testing.T) {
+	path := filepath.Join(t.TempDir(), ".aigate.yml")
+	os.WriteFile(path, []byte("claude: [this is not a mapping\n"), 0644)
+
+	if gitStateContextInstalled(path) {
+		t.Error("expected gitStateContextInstalled to be false on unparseable YAML")
+	}
+}
+
+func TestDetectState_ReportsGitStateContext(t *testing.T) {
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte("claude:\n  session-start:\n    context:\n      - type: git-state\n"), 0644)
+
+	cur, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !cur.GitStateContext {
+		t.Error("expected GitStateContext to be true when a git-state entry is present")
+	}
+}
+
+func TestDetectState_ReportsNoGitStateContext(t *testing.T) {
+	dir := t.TempDir()
+
+	os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte("claude:\n  session-start:\n    context: []\n"), 0644)
+
+	cur, err := Detect(dir)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if cur.GitStateContext {
+		t.Error("expected GitStateContext to be false when no git-state entry is present")
+	}
+}

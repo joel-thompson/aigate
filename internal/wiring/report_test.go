@@ -571,3 +571,69 @@ func TestLoadConfigStatus_ValidFile(t *testing.T) {
 		t.Error("expected the parsed config to reflect the file's contents")
 	}
 }
+
+// TestInspect_MarksGitStateNotApplicableWithoutGitRepo cannot use
+// setupFullyWired: that seeds a .git/hooks directory for the pre-commit
+// hook, which is exactly what makes git-state applicable.
+func TestInspect_MarksGitStateNotApplicableWithoutGitRepo(t *testing.T) {
+	dir := t.TempDir()
+
+	aigateConfig := "claude:\n  session-start:\n    context:\n      - type: project-structure\n"
+	if err := os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte(aigateConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Inspect(dir, fakeLookPath("/usr/local/bin/aigate", nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c, ok := findCheck(rep, "Git state")
+	if !ok {
+		t.Fatal("expected a Git state check")
+	}
+	if c.Status != StatusNotApplicable {
+		t.Fatalf("expected Git state to be not applicable outside a git repository, got %v", c.Status)
+	}
+}
+
+func TestInspect_ReportsGitStateNotConfiguredWhenGitRepoPresent(t *testing.T) {
+	dir := t.TempDir()
+	setupFullyWired(t, dir)
+
+	rep, err := Inspect(dir, fakeLookPath("/usr/local/bin/aigate", nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c, ok := findCheck(rep, "Git state")
+	if !ok {
+		t.Fatal("expected a Git state check")
+	}
+	if c.Status != StatusNotConfigured {
+		t.Fatalf("expected Git state to be not configured when the project is a git repo and no git-state entry exists, got %v", c.Status)
+	}
+}
+
+func TestInspect_ReportsGitStateOKWhenEntryPresent(t *testing.T) {
+	dir := t.TempDir()
+	setupFullyWired(t, dir)
+
+	aigateConfig := "claude:\n  session-start:\n    context:\n      - type: git-state\n"
+	if err := os.WriteFile(filepath.Join(dir, ".aigate.yml"), []byte(aigateConfig), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	rep, err := Inspect(dir, fakeLookPath("/usr/local/bin/aigate", nil))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	c, ok := findCheck(rep, "Git state")
+	if !ok {
+		t.Fatal("expected a Git state check")
+	}
+	if c.Status != StatusOK {
+		t.Fatalf("expected Git state to be ok when a git-state entry is present in a git repo, got %v", c.Status)
+	}
+}

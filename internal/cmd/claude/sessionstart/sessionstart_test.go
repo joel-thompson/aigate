@@ -113,6 +113,34 @@ claude:
 	}
 }
 
+// TestSessionStartCommand_GitStateTypeIsSupported guards the buildProviders
+// switch: git-state being in validTypes is not enough, it must also be
+// wired, or it falls through to unsupportedProvider.
+func TestSessionStartCommand_GitStateTypeIsSupported(t *testing.T) {
+	t.Chdir(t.TempDir())
+	writeConfig(t, `
+claude:
+  session-start:
+    context:
+      - type: git-state
+`)
+
+	cmd := NewCommand()
+	var stdout, stderr bytes.Buffer
+	cmd.SetOut(&stdout)
+	cmd.SetErr(&stderr)
+	cmd.SetArgs([]string{})
+
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("expected nil error (fail open), got %v", err)
+	}
+	// The temp dir is not a git repo, so the provider gates out and emits
+	// nothing. What matters is that no unsupported-type error is reported.
+	if strings.Contains(stderr.String(), "unsupported provider type") {
+		t.Errorf("expected git-state to be wired into buildProviders, got stderr %q", stderr.String())
+	}
+}
+
 func writeConfig(t *testing.T, content string) {
 	t.Helper()
 	if err := os.WriteFile(config.DefaultConfigFile, []byte(content), 0644); err != nil {

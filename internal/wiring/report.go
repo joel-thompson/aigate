@@ -9,6 +9,7 @@ import (
 	"github.com/joelthompson/aigate/internal/config"
 	"github.com/joelthompson/aigate/internal/provider/ciinfo"
 	"github.com/joelthompson/aigate/internal/provider/dockercompose"
+	"github.com/joelthompson/aigate/internal/provider/gitstate"
 )
 
 // settingsRelPath is settings.local.json's location relative to the project
@@ -185,6 +186,7 @@ func (f feature) problemDetail() (detail, path string) {
 type Applicability struct {
 	CI            bool
 	DockerCompose bool
+	GitState      bool
 }
 
 // snapshot is everything both doctor's report and init's completeness check
@@ -266,8 +268,10 @@ func (s snapshot) features() []feature {
 			},
 			remedy: "aigate init --git-hooks",
 		},
-		// Appended last on purpose: doctor's tests address checks by index,
-		// so a new feature slotted in ahead of one silently retargets them.
+		// Everything from here down is appended, never inserted: doctor's
+		// tests address checks by index, so a new feature slotted in ahead of
+		// an existing one silently retargets them. The next one goes at the
+		// end of this list.
 		{
 			label: "Docker context",
 			section: artifact{
@@ -278,6 +282,17 @@ func (s snapshot) features() []feature {
 				unknown: s.configUnknown,
 			},
 			inapplicable: dockerInapplicableReason(s.applicable.DockerCompose),
+		},
+		{
+			label: "Git state",
+			section: artifact{
+				key:     "GitStateContext",
+				what:    "git-state entry in claude.session-start.context",
+				path:    s.paths.config,
+				present: s.state.GitStateContext,
+				unknown: s.configUnknown,
+			},
+			inapplicable: gitStateInapplicableReason(s.applicable.GitState),
 		},
 	}
 }
@@ -294,6 +309,13 @@ func dockerInapplicableReason(dockerApplicable bool) string {
 		return ""
 	}
 	return "no compose file in the project root"
+}
+
+func gitStateInapplicableReason(gitStateApplicable bool) string {
+	if gitStateApplicable {
+		return ""
+	}
+	return "not a git repository"
 }
 
 // Status is a Check's outcome.
@@ -365,6 +387,7 @@ func Inspect(root string, lookPath func(string) (string, error)) (Report, error)
 		applicable: Applicability{
 			CI:            ciinfo.Detected(p.root),
 			DockerCompose: dockercompose.Detected(p.root),
+			GitState:      gitstate.Detected(p.root),
 		},
 		configUnknown:   cfgStatus.exists && cfgStatus.err != nil,
 		settingsUnknown: setStatus.exists && setStatus.err != nil,

@@ -70,6 +70,7 @@ var validTypes = map[string]bool{
 	"secrets-scan":      true,
 	"ci-info":           true,
 	"docker-compose":    true,
+	"git-state":         true,
 }
 
 func Load(path string) (*Config, error) {

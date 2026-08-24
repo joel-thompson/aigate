@@ -464,3 +464,22 @@ claude:
 		t.Errorf("expected empty label, got %q", cfg.Claude.SessionStart.Context[0].Label)
 	}
 }
+
+func TestParse_GitStateType(t *testing.T) {
+	input := `
+claude:
+  session-start:
+    context:
+      - type: git-state
+`
+	cfg, err := Parse([]byte(input))
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(cfg.Claude.SessionStart.Context) != 1 {
+		t.Fatalf("expected 1 context provider, got %d", len(cfg.Claude.SessionStart.Context))
+	}
+	if cfg.Claude.SessionStart.Context[0].Type != "git-state" {
+		t.Errorf("expected type git-state, got %q", cfg.Claude.SessionStart.Context[0].Type)
+	}
+}

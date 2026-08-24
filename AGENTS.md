@@ -38,7 +38,7 @@ failed providers' output rather than surfacing raw errors to Claude.
 `internal/provider/`, `validTypes` in `internal/config/config.go`, and the
 `buildProviders`/`buildChecks` switch in the command that uses it. Unknown types fail at `Run`,
 not at wiring time. A *detected, opt-in* provider — one `init` offers when it spots the tool and
-`doctor` then reports on, as `ci-info` and `docker-compose` do — touches four more:
+`doctor` then reports on, as `ci-info`, `docker-compose` and `git-state` do — touches four more:
 `wiring/configedit.go` (an `Enable*` splicing its list item), `wiring/detect.go` (a `state` field),
 `wiring/report.go` (an `Applicability` field plus a `features()` entry), and
 `internal/cmd/init/init.go` (detection, prompt, step). The provider package exports a
@@ -89,7 +89,10 @@ so a probe that can see a credential must not be able to print one. `docker comp
 --format json` resolves every service's `environment` in full, credentials included — so
 `dockercompose`'s decode struct simply omits the field, making the leak structurally impossible
 rather than a rule someone has to remember. Probes there return `(T, bool)` rather than an
-`error` for the same reason: an `*exec.ExitError` carries the child's captured stderr.
+`error` for the same reason: an `*exec.ExitError` carries the child's captured stderr. `gitstate`
+draws the same line one step earlier: it reports gitignored file *paths* so a fresh worktree knows
+what it is missing, and never reads one — naming `.env` is the whole value, printing it would be
+the whole risk.
 
 **Group commands must reject unknown subcommands.** `RunE` that errors on unknown args, plus
 `FParseErrWhitelist{UnknownFlags: true}`, on `claude` and `git`. Without it an unknown subcommand

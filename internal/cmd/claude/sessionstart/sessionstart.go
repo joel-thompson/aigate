@@ -11,6 +11,7 @@ import (
 	"github.com/joelthompson/aigate/internal/provider"
 	"github.com/joelthompson/aigate/internal/provider/ciinfo"
 	"github.com/joelthompson/aigate/internal/provider/dockercompose"
+	"github.com/joelthompson/aigate/internal/provider/gitstate"
 	"github.com/joelthompson/aigate/internal/provider/projectstructure"
 	"github.com/joelthompson/aigate/internal/provider/shell"
 	"github.com/joelthompson/aigate/internal/runner"
@@ -80,6 +81,8 @@ func buildProviders(cfg *config.Config) []provider.Provider {
 			providers = append(providers, &ciinfo.Provider{})
 		case "docker-compose":
 			providers = append(providers, &dockercompose.Provider{Files: pc.Files})
+		case "git-state":
+			providers = append(providers, &gitstate.Provider{})
 		default:
 			providers = append(providers, &unsupportedProvider{typeName: pc.Type})
 		}

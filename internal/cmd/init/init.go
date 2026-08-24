@@ -11,18 +11,20 @@ import (
 	"github.com/joelthompson/aigate/internal/config"
 	"github.com/joelthompson/aigate/internal/provider/ciinfo"
 	"github.com/joelthompson/aigate/internal/provider/dockercompose"
+	"github.com/joelthompson/aigate/internal/provider/gitstate"
 	"github.com/joelthompson/aigate/internal/wiring"
 	"github.com/spf13/cobra"
 )
 
 // steps holds which init steps are requested, whether from flags or prompts.
 type steps struct {
-	config        bool
-	claudeHooks   bool
-	ciContext     bool
-	dockerContext bool
-	stopPrompt    bool
-	gitHooks      bool
+	config          bool
+	claudeHooks     bool
+	ciContext       bool
+	dockerContext   bool
+	gitStateContext bool
+	stopPrompt      bool
+	gitHooks        bool
 }
 
 func NewCommand() *cobra.Command {
@@ -69,6 +71,7 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 	// the prompt) is skipped in that mode.
 	ciDetected := ciinfo.Detected(".")
 	dockerDetected := dockercompose.Detected(".")
+	gitStateDetected := gitstate.Detected(".")
 
 	if !nonInteractive {
 		cur, err := wiring.Detect(".")
@@ -76,7 +79,7 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 			return fmt.Errorf("detecting wiring: %w", err)
 		}
 
-		if wiring.Complete(cur, wiring.Applicability{CI: ciDetected, DockerCompose: dockerDetected}) {
+		if wiring.Complete(cur, wiring.Applicability{CI: ciDetected, DockerCompose: dockerDetected, GitState: gitStateDetected}) {
 			fmt.Fprintln(w, "Everything is already set up.")
 			fmt.Fprintln(w)
 		}
@@ -89,11 +92,15 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 		if dockerDetected {
 			do.dockerContext = askUnlessDone(prompter, cur.DockerContext, "Add Docker stack info to Claude's session context?")
 		}
+		if gitStateDetected {
+			do.gitStateContext = askUnlessDone(prompter, cur.GitStateContext, "Add git branch and worktree info to Claude's session context?")
+		}
 		do.stopPrompt = askUnlessDone(prompter, cur.StopHook && cur.StopPrompt, "Register Claude Code stop hook for concise recaps?")
 		do.gitHooks = askUnlessDone(prompter, cur.GitHook && cur.PreCommitChecks, "Set up git pre-commit hook?")
 	} else {
 		do.ciContext = do.claudeHooks && ciDetected
 		do.dockerContext = do.claudeHooks && dockerDetected
+		do.gitStateContext = do.claudeHooks && gitStateDetected
 	}
 
 	var hadError bool
@@ -151,6 +158,19 @@ func runInit(w io.Writer, prompter func(string) bool, flags steps) error {
 				return wiring.StepResult{Err: err}
 			}
 			return wiring.EnableDockerContext(configPath)
+		})
+		if result.Err != nil {
+			hadError = true
+		}
+	}
+
+	if gitStateDetected {
+		result = printStep(w, "Git state", do.gitStateContext, func() wiring.StepResult {
+			configPath, err := filepath.Abs(config.DefaultConfigFile)
+			if err != nil {
+				return wiring.StepResult{Err: err}
+			}
+			return wiring.EnableGitStateContext(configPath)
 		})
 		if result.Err != nil {
 			hadError = true

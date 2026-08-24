@@ -39,6 +39,10 @@ const ciContextEntry = "- type: ci-info"
 // claude.session-start.context by the Docker-context init step.
 const dockerContextEntry = "- type: docker-compose"
 
+// gitStateContextEntry is the list item spliced into
+// claude.session-start.context by the git-state init step.
+const gitStateContextEntry = "- type: git-state"
+
 // errNoContextList is returned by mergeContextEntry when
 // claude.session-start.context doesn't already exist as a block-style
 // sequence to splice an item into.
@@ -97,6 +101,12 @@ func dockerContextPresent(cfg *config.Config) bool {
 	return contextEntryPresent(cfg, "docker-compose")
 }
 
+// gitStateContextPresent reports whether claude.session-start.context
+// already has a git-state entry.
+func gitStateContextPresent(cfg *config.Config) bool {
+	return contextEntryPresent(cfg, "git-state")
+}
+
 // mergeSessionStart returns data with a claude.session-start section
 // inserted. See mergeSection for the ok/ordering contract.
 func mergeSessionStart(data []byte) ([]byte, bool, error) {
@@ -125,6 +135,12 @@ func mergeCIContext(data []byte) ([]byte, bool, error) {
 // appended to the claude.session-start.context list.
 func mergeDockerContext(data []byte) ([]byte, bool, error) {
 	return mergeContextEntry(data, dockerContextEntry, dockerContextPresent)
+}
+
+// mergeGitStateContext returns data with a "- type: git-state" item appended
+// to the claude.session-start.context list.
+func mergeGitStateContext(data []byte) ([]byte, bool, error) {
+	return mergeContextEntry(data, gitStateContextEntry, gitStateContextPresent)
 }
 
 // mergeContextEntry returns data with entry appended to the
@@ -390,6 +406,21 @@ func EnableDockerContext(configPath string) StepResult {
 		"docker-compose already in claude.session-start.context")
 	if res.Err != nil && errors.Is(res.Err, errNoContextList) {
 		return StepResult{Skipped: true, Reason: `claude.session-start.context not found (add "- type: docker-compose" by hand)`}
+	}
+	return res
+}
+
+// EnableGitStateContext adds a git-state entry to
+// claude.session-start.context in .aigate.yml. Like EnableCIContext, a
+// context list that isn't in a splice-able shape is a skip rather than an
+// error: the fix is a one-line manual edit, not something worth failing init
+// over.
+func EnableGitStateContext(configPath string) StepResult {
+	res := editConfig(configPath, mergeGitStateContext,
+		"added git-state to claude.session-start.context",
+		"git-state already in claude.session-start.context")
+	if res.Err != nil && errors.Is(res.Err, errNoContextList) {
+		return StepResult{Skipped: true, Reason: `claude.session-start.context not found (add "- type: git-state" by hand)`}
 	}
 	return res
 }

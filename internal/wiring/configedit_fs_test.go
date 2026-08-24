@@ -231,3 +231,120 @@ func TestEnableStopPrompt_PreservesFileMode(t *testing.T) {
 		t.Errorf("expected file mode 0600 to be preserved, got %v", info.Mode().Perm())
 	}
 }
+
+func TestEnableGitStateContext_WritesMergedFile(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".aigate.yml")
+	before := "claude:\n  session-start:\n    context:\n      - type: project-structure\n"
+	if err := os.WriteFile(path, []byte(before), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := EnableGitStateContext(path)
+
+	if result.Skipped || result.Err != nil {
+		t.Fatalf("expected git-state to be added, got: %s", result)
+	}
+
+	cfg, err := config.Load(path)
+	if err != nil {
+		t.Fatalf("merged file failed to parse: %v", err)
+	}
+	found := false
+	for _, p := range cfg.Claude.SessionStart.Context {
+		if p.Type == "git-state" {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("expected git-state to be present in claude.session-start.context")
+	}
+}
+
+func TestEnableGitStateContext_SkipsWhenAlreadyPresent(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".aigate.yml")
+	original := "claude:\n  session-start:\n    context:\n      - type: git-state\n"
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := EnableGitStateContext(path)
+
+	if !result.Skipped {
+		t.Fatal("expected skip when git-state is already present")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != original {
+		t.Error("expected file to be left untouched")
+	}
+}
+
+func TestEnableGitStateContext_SkipsWhenConfigMissing(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".aigate.yml")
+
+	result := EnableGitStateContext(path)
+
+	if !result.Skipped {
+		t.Fatal("expected skip when config file is missing")
+	}
+	if result.Reason == "" {
+		t.Error("expected a skip reason")
+	}
+}
+
+func TestEnableGitStateContext_TranslatesNoContextListToSkip(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".aigate.yml")
+	original := "claude:\n  stop-prompt:\n    enabled: true\n"
+	if err := os.WriteFile(path, []byte(original), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	result := EnableGitStateContext(path)
+
+	if result.Err != nil {
+		t.Fatalf("expected the missing-context-list error translated to a skip, got error: %v", result.Err)
+	}
+	if !result.Skipped {
+		t.Fatal("expected skip when claude.session-start.context isn't a list")
+	}
+	if result.Reason == "" {
+		t.Error("expected a skip reason")
+	}
+
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != original {
+		t.Error("expected file to be left untouched")
+	}
+}
+
+func TestEnableGitStateContext_PreservesFileMode(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ".aigate.yml")
+	before := "claude:\n  session-start:\n    context:\n      - type: project-structure\n"
+	if err := os.WriteFile(path, []byte(before), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	result := EnableGitStateContext(path)
+	if result.Skipped || result.Err != nil {
+		t.Fatalf("expected git-state to be added, got: %s", result)
+	}
+
+	info, err := os.Stat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm() != 0600 {
+		t.Errorf("expected file mode 0600 to be preserved, got %v", info.Mode().Perm())
+	}
+}
