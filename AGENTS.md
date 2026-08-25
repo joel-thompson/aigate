@@ -34,15 +34,17 @@ failed providers' output rather than surfacing raw errors to Claude.
 **The stop hook is special.** Blocks with exit 2 and the prompt on *stderr*, never stdout; sets
 `SilenceErrors` so cobra's banner doesn't leak into the recap instruction.
 
-**Adding a provider** has two tiers. A plain provider touches three places: the package under
-`internal/provider/`, `validTypes` in `internal/config/config.go`, and the
-`buildProviders`/`buildChecks` switch in the command that uses it. Unknown types fail at `Run`,
-not at wiring time. A *detected, opt-in* provider — one `init` offers when it spots the tool and
-`doctor` then reports on, as `ci-info`, `docker-compose` and `git-state` do — touches four more:
-`wiring/configedit.go` (an `Enable*` splicing its list item), `wiring/detect.go` (a `state` field),
-`wiring/report.go` (an `Applicability` field plus a `features()` entry), and
-`internal/cmd/init/init.go` (detection, prompt, step). The provider package exports a
-`Detected(root) bool` that `init` and `doctor` share, so the predicate is defined once.
+**Adding a provider** has two tiers. A plain provider touches four places: the package under
+`internal/provider/`, `validTypes` in `internal/config/config.go`, the
+`buildProviders`/`buildChecks` switch in the command that uses it, and `README.md`'s configuration
+reference. Unknown types fail at `Run`, not at wiring time. A *detected, opt-in* provider — one
+`init` offers when it spots the tool and `doctor` then reports on, as `ci-info`, `docker-compose`
+and `git-state` do — touches four more: `wiring/configedit.go` (an `Enable*` splicing its list
+item), `wiring/detect.go` (a `state` field), `wiring/report.go` (an `Applicability` field plus a
+`features()` entry), and `internal/cmd/init/init.go` (detection, prompt, step). The provider
+package exports a `Detected(root) bool` that `init` and `doctor` share, so the predicate is
+defined once. The README's provider list is where auto-detection gets disclosed to users, so a
+detected provider's entry says what `init` looks for.
 
 **Config edits splice raw text lines.** Never re-marshal `.aigate.yml` — it would destroy comments
 and formatting. `KnownFields(true)` makes an unknown YAML key a hard error.
@@ -77,6 +79,13 @@ accumulate state.
 **Inference is disclosed, never silent.** `ciinfo.Detected`/`wiring.Detect` infer; `init`'s
 `printStep` and `doctor`'s report disclose. Same for file writes and subprocess execs — the
 `shell` provider execs config-supplied commands, `ci-info` shells out to `circleci`.
+
+**`README.md` is the user-facing contract.** `AGENTS.md` documents the code for whoever changes
+it; the README documents the tool for whoever runs it, and it's the only prose docs there are — no
+command carries `Long` or `Example` text. Anything that changes the surface a user touches updates
+it in the same commit: a new provider or provider config key, a new or renamed command or flag, a
+changed default, a changed exit code, a changed output format quoted in the examples, or a change
+to `install.sh`. Internal refactors don't.
 
 **Remedies are a field, not prose.** `Check.Remedy` (`wiring/report.go:289`) carries the fix
 (`aigate init --claude-hooks`, etc.); `doctor` renders it as `fix: …`.
