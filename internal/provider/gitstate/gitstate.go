@@ -19,7 +19,10 @@ import (
 	"github.com/joelthompson/aigate/internal/provider/dockercompose"
 )
 
-const label = "Git"
+// label says the block is a snapshot because hook output can only be
+// appended to the conversation, never replaced: this stays in context for
+// the whole session while the commits and dirty counts it reports move on.
+const label = "Git (snapshot at session start, not live)"
 
 // maxRecentCommits and maxIgnoredEntries cap the rendered output, following
 // dockercompose's maxServices: a main checkout with 200 gitignored entries

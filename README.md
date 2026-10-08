@@ -149,7 +149,9 @@ repo root.
 **`git-state`** — session-start, no config. Reports the branch and its upstream, ahead/behind
 counts, how dirty the tree is, whether an operation like a rebase is half-finished, recent commit
 subjects, and — in a linked worktree — which of the main checkout's gitignored files this worktree
-is missing. Labeled `Git`. Auto-offered by `init` when the directory is a git checkout.
+is missing. Labeled `Git (snapshot at session start, not live)`, since the block stays in context
+for the whole session while the state it reports moves on. Auto-offered by `init` when the
+directory is a git checkout.
 
 It reports gitignored *paths* and never reads one: naming `.env` is the value, printing it would be
 the risk.
@@ -196,7 +198,7 @@ pre-commit check in the session-start list passes validation and fails when the 
 ├── go.mod
 └── install.sh
 
-## Git
+## Git (snapshot at session start, not live)
 main → origin/main · ahead 2 · 1 staged, 1 modified
 Main checkout /Users/you/src/project
 Recent: 2c872c7 Ignore the built aigate binary

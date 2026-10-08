@@ -658,6 +658,27 @@ func TestRun_MainCheckoutRender(t *testing.T) {
 	}
 }
 
+// The heading is the only thing telling the model this block goes stale, so
+// it is asserted as a literal rather than against the label constant.
+func TestRun_LabelMarksSnapshot(t *testing.T) {
+	root := gitRoot(t)
+	p := &Provider{Root: root, runCLI: stubCLI(map[string]string{
+		toplevelKey: root + "\n.git\n",
+		statusKey:   statusNoUpstream,
+		worktreeKey: "worktree " + root + "\nHEAD abc\nbranch refs/heads/main\n",
+		logKey:      "f036276 Add docker-compose provider\n",
+	}, nil)}
+
+	result, err := p.Run(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	want := "Git (snapshot at session start, not live)"
+	if result.Label != want {
+		t.Errorf("expected label %q, got %q", want, result.Label)
+	}
+}
+
 func TestRun_CleanMainCheckoutWithNoUpstream(t *testing.T) {
 	root := gitRoot(t)
 	p := &Provider{Root: root, runCLI: stubCLI(map[string]string{
