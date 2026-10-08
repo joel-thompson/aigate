@@ -147,9 +147,9 @@ func (p *Provider) Run(ctx context.Context) (*provider.Result, error) {
 	// The ignored-file diff only means anything in a linked worktree, and it
 	// is the main checkout's contents that answer it, so this probe is
 	// skipped entirely in the main checkout.
-	var missing, present []string
+	var missing []string
 	if linked && ctx.Err() == nil {
-		missing, present = p.ignoredDiff(ctx, main.path, toplevel)
+		missing = p.ignoredDiff(ctx, main.path, toplevel)
 	}
 
 	// An unborn HEAD has nothing to log, so the exec is skipped rather than
@@ -167,7 +167,6 @@ func (p *Provider) Run(ctx context.Context) (*provider.Result, error) {
 		status:     st,
 		operation:  detectOperation(gitDir),
 		missing:    missing,
-		present:    present,
 		recent:     recent,
 		hasCompose: dockercompose.Detected(toplevel),
 	})
@@ -186,26 +185,26 @@ var noiseEntries = map[string]bool{
 	"desktop.ini": true,
 }
 
-// ignoredDiff splits the main checkout's gitignored entries into the ones
-// absent from this worktree and the ones already here. Only the main
-// checkout is probed; whether an entry exists here is an os.Stat, which is
-// both cheaper than a second exec and the question actually being asked.
-func (p *Provider) ignoredDiff(ctx context.Context, mainPath, toplevel string) (missing, present []string) {
+// ignoredDiff returns the main checkout's gitignored entries that are absent
+// from this worktree. The ones already here go unreported: they need no
+// action, and the agent can list them itself. Only the main checkout is
+// probed; whether an entry exists here is an os.Stat, which is both cheaper
+// than a second exec and the question actually being asked.
+func (p *Provider) ignoredDiff(ctx context.Context, mainPath, toplevel string) (missing []string) {
 	entries, ok := p.queryIgnored(ctx, mainPath)
 	if !ok {
-		return nil, nil
+		return nil
 	}
 	for _, entry := range entries {
 		if noiseEntries[filepath.Base(entry)] {
 			continue
 		}
 		if pathExists(filepath.Join(toplevel, entry)) {
-			present = append(present, entry)
 			continue
 		}
 		missing = append(missing, entry)
 	}
-	return missing, present
+	return missing
 }
 
 func pathExists(path string) bool {

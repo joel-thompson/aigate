@@ -508,7 +508,7 @@ func TestDetectOperation_ReadsTheWorktreeLocalGitDir(t *testing.T) {
 	}
 }
 
-func TestIgnoredDiff_SplitsByWhatThisWorktreeHas(t *testing.T) {
+func TestIgnoredDiff_OmitsWhatThisWorktreeHas(t *testing.T) {
 	mainPath := t.TempDir()
 	toplevel := t.TempDir()
 	mkdir(t, filepath.Join(toplevel, "node_modules"))
@@ -517,16 +517,12 @@ func TestIgnoredDiff_SplitsByWhatThisWorktreeHas(t *testing.T) {
 		ignoredKey: ".env\x00node_modules/\x00.vscode/settings.json\x00",
 	}, nil)}
 
-	missing, present := p.ignoredDiff(context.Background(), mainPath, toplevel)
+	missing := p.ignoredDiff(context.Background(), mainPath, toplevel)
 
 	wantMissing := ".env,.vscode/settings.json"
 	gotMissing := strings.Join(missing, ",")
 	if gotMissing != wantMissing {
 		t.Errorf("expected missing %q, got %q", wantMissing, gotMissing)
-	}
-	gotPresent := strings.Join(present, ",")
-	if gotPresent != "node_modules/" {
-		t.Errorf("expected present %q, got %q", "node_modules/", gotPresent)
 	}
 }
 
@@ -542,15 +538,11 @@ func TestIgnoredDiff_NonASCIIPathIsNotEscaped(t *testing.T) {
 		ignoredKey: "café.env\x00.env\x00",
 	}, nil)}
 
-	missing, present := p.ignoredDiff(context.Background(), mainPath, toplevel)
+	missing := p.ignoredDiff(context.Background(), mainPath, toplevel)
 
-	gotPresent := strings.Join(present, ",")
-	if gotPresent != "café.env" {
-		t.Errorf("expected the non-ASCII path to be found in this worktree, got %q", gotPresent)
-	}
 	gotMissing := strings.Join(missing, ",")
 	if gotMissing != ".env" {
-		t.Errorf("expected only .env to be missing, got %q", gotMissing)
+		t.Errorf("expected the non-ASCII path to be found in this worktree and only .env missing, got %q", gotMissing)
 	}
 }
 
@@ -564,7 +556,7 @@ func TestIgnoredDiff_PathWithSpaces(t *testing.T) {
 		ignoredKey: "my secrets.env\x00",
 	}, nil)}
 
-	missing, _ := p.ignoredDiff(context.Background(), mainPath, toplevel)
+	missing := p.ignoredDiff(context.Background(), mainPath, toplevel)
 
 	gotMissing := strings.Join(missing, ",")
 	if gotMissing != "my secrets.env" {
@@ -575,9 +567,9 @@ func TestIgnoredDiff_PathWithSpaces(t *testing.T) {
 func TestIgnoredDiff_ProbeFailureYieldsNothing(t *testing.T) {
 	p := &Provider{runCLI: failingCLI}
 
-	missing, present := p.ignoredDiff(context.Background(), t.TempDir(), t.TempDir())
-	if missing != nil || present != nil {
-		t.Errorf("expected nothing when the probe fails, got missing %v present %v", missing, present)
+	missing := p.ignoredDiff(context.Background(), t.TempDir(), t.TempDir())
+	if missing != nil {
+		t.Errorf("expected nothing when the probe fails, got %v", missing)
 	}
 }
 
@@ -755,7 +747,6 @@ func TestRun_LinkedWorktreeRender(t *testing.T) {
 		"Linked worktree " + root + "\n" +
 		"  Main checkout: " + mainPath + "\n" +
 		"  Gitignored files are per-worktree, not shared. Present in the main checkout but MISSING here: .env, .claude/settings.local.json\n" +
-		"  Already present here: node_modules/\n" +
 		"Recent: 672df83 a commit"
 	if got != want {
 		t.Errorf("expected output:\n%s\n\ngot:\n%s", want, got)
@@ -873,25 +864,21 @@ func TestRun_OmitsSiblingWorktrees(t *testing.T) {
 }
 
 // OS metadata is gitignored everywhere and is never an artifact a fresh
-// worktree needs, so it is filtered out of both halves of the diff rather
-// than crowding out the .env that matters.
+// worktree needs, so it is filtered out rather than crowding out the .env
+// that matters.
 func TestIgnoredDiff_FiltersOSMetadataNoise(t *testing.T) {
 	mainPath := t.TempDir()
 	toplevel := t.TempDir()
-	writeFile(t, filepath.Join(toplevel, "Thumbs.db"), "")
 
 	p := &Provider{runCLI: stubCLI(map[string]string{
 		ignoredKey: ".DS_Store\x00.env\x00Thumbs.db\x00desktop.ini\x00src/.DS_Store\x00",
 	}, nil)}
 
-	missing, present := p.ignoredDiff(context.Background(), mainPath, toplevel)
+	missing := p.ignoredDiff(context.Background(), mainPath, toplevel)
 
 	gotMissing := strings.Join(missing, ",")
 	if gotMissing != ".env" {
 		t.Errorf("expected only .env to be missing, got %q", gotMissing)
-	}
-	if len(present) != 0 {
-		t.Errorf("expected no noise entries reported as present, got %v", present)
 	}
 }
 

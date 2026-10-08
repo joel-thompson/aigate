@@ -15,14 +15,12 @@ type renderInput struct {
 	status    status
 	operation string // "" when nothing is half-finished
 
-	// missing and present are the main checkout's gitignored entries split by
-	// whether this worktree has them. Both are PATHS ONLY — this provider
-	// names .env, it never reads it. That is what makes reporting on ignored
-	// files safe at all: provider output goes straight into the model's
-	// context, so a probe that can see a credential must not be able to
-	// print one.
+	// missing holds the main checkout's gitignored entries this worktree
+	// lacks. They are PATHS ONLY — this provider names .env, it never reads
+	// it. That is what makes reporting on ignored files safe at all: provider
+	// output goes straight into the model's context, so a probe that can see
+	// a credential must not be able to print one.
 	missing []string
-	present []string
 
 	recent     []string
 	hasCompose bool
@@ -146,9 +144,6 @@ func (in renderInput) worktreeLines() []string {
 
 	if len(in.missing) > 0 {
 		lines = append(lines, indent+"Gitignored files are per-worktree, not shared. Present in the main checkout but MISSING here: "+joinCapped(in.missing, maxIgnoredEntries))
-	}
-	if len(in.present) > 0 {
-		lines = append(lines, indent+"Already present here: "+joinCapped(in.present, maxIgnoredEntries))
 	}
 	if in.hasCompose {
 		lines = append(lines, indent+"Docker Compose names its project after the directory, so this worktree gets its own containers, volumes and networks, and collides on host ports with a stack started in another worktree.")
